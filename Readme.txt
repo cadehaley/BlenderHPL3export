@@ -1,4 +1,4 @@
-===HPL3 Exporter Version 1.0===
+===HPL3 Exporter Version 1.1===
 
 This addon allows you to model anything from single assets 
 to entire maps within Blender, and synchronize them to an HPL3 engine map, 

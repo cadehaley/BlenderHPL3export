@@ -5,7 +5,7 @@ bl_info = {
     "name": "HPL3 Export",
     "description": "Export objects and materials directly into an HPL3 map",
     "author": "cadely",
-    "version": (1, 0, 0),
+    "version": (1, 1, 0),
     "blender": (2, 80, 0),
     "location": "3D View > Tools",
     "warning": "", # used for warning icon and text in addons panel
@@ -62,23 +62,37 @@ class HPL3_Export_Properties (PropertyGroup):
         update=update_map_path
         )
     
-    def update_mesh_path(self, context):
-        noslash = re.sub(r'\\\\', '', self["mesh_export_path"])
+    def update_entity_path(self, context):
+        noslash = re.sub(r'\\\\', '', self["entity_export_path"])
         abspath = os.path.abspath(noslash)
-        self["mesh_export_path"] = abspath
+        self["entity_export_path"] = abspath
 
-    mesh_export_path : StringProperty(
-        name="Asset Folder",
-        description="Destination for all exported .dae and .dds files, which will be grouped into subfolders by mesh datablock name (under the polygon triangle icon). Recommendation: Use one of these asset folders per map, or per project. Also, make one asset folder for entities, and one for static objects",
+    entity_export_path : StringProperty(
+        name="Entities Folder",
+        description="Destination for all entity .dae and .dds files, which will be grouped into subfolders by mesh datablock name (under the polygon triangle icon). Recommendation: Use one of these asset folders per map, or per project. Also, make one asset folder for entities, and one for static objects",
         default="",
         maxlen=4096,
         subtype='DIR_PATH',
-        update=update_mesh_path
+        update=update_entity_path
+        )
+
+    def update_statobj_path(self, context):
+        noslash = re.sub(r'\\\\', '', self["statobj_export_path"])
+        abspath = os.path.abspath(noslash)
+        self["statobj_export_path"] = abspath
+
+    statobj_export_path : StringProperty(
+        name="Static Objects Folder",
+        description="Destination for all static object .dae and .dds files, which will be grouped into subfolders by mesh datablock name (under the polygon triangle icon). Recommendation: Use one of these asset folders per map, or per project. Also, make one asset folder for entities, and one for static objects",
+        default="",
+        maxlen=4096,
+        subtype='DIR_PATH',
+        update=update_statobj_path
         )
         
     bake_scene_lighting : BoolProperty(
         name="Bake Scene Lighting (SLOW)",
-        description="Use Cycles to bake direct and indirect lighting to the diffuse texture (only use for single-use stationary objects)",
+        description="Use Cycles to bake direct and indirect lighting to the diffuse texture (only use for single-use stationary objects). Set samples using Render > Sampling > Render Samples to control quality/time",
         default = False
         )
         
@@ -164,6 +178,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
     asset_xml = None
     current_DAE = None
     CONVERTERPATH = None
+    mesh_export_path = None
     
 
     # ------------------------------------------------------------------------
@@ -207,7 +222,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                 if mytool.map_file_path != "":
                     old_mod_time = self.add_object(mytool, current, subdir)
                 else:
-                    filepath = mytool.mesh_export_path + "/" + subdir + "/" + re.sub(r'[^\w\-\s\/\\\.]+', '', current.data.name) + ".dae"
+                    filepath = self.mesh_export_path + "/" + subdir + "/" + re.sub(r'[^\w\-\s\/\\\.]+', '', current.data.name) + ".dae"
                     filepath = re.sub(r'\\', '/', os.path.normpath(filepath))
                     short_path = re.sub(r'.*\/SOMA\/', '', filepath)
                     self.get_asset_xml_entry(short_path)
@@ -268,9 +283,9 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         
         # Assemble .dae/ent path
         if is_ent:
-            filepath = mytool.mesh_export_path + "/" + _subdir + "/" + re.sub(r'[^\w\-\s\/\\\.]+', '', current_obj.data.name) + ".ent"
+            filepath = self.mesh_export_path + "/" + _subdir + "/" + re.sub(r'[^\w\-\s\/\\\.]+', '', current_obj.data.name) + ".ent"
         else:
-            filepath = mytool.mesh_export_path + "/" + _subdir + "/" + re.sub(r'[^\w\-\s\/\\\.]+', '', current_obj.data.name) + ".dae"
+            filepath = self.mesh_export_path + "/" + _subdir + "/" + re.sub(r'[^\w\-\s\/\\\.]+', '', current_obj.data.name) + ".dae"
         filepath = re.sub(r'\\', '/', os.path.normpath(filepath))
         short_path = re.sub(r'.*\/SOMA\/', '', filepath)
             
@@ -513,6 +528,10 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             bpy.ops.uv.smart_project(angle_limit=85.0, island_margin = 0.02, use_aspect=False, stretch_to_bounds=False)
 
         render_engine = bpy.context.scene.render.engine
+        if render_engine == "BLENDER_EEVEE":
+            render_samples = bpy.context.scene.eevee.taa_render_samples
+        else:
+            render_samples = bpy.context.scene.cycles.samples
         
         # bake type, suffix, is_exportable, is_bakeable, socket_num, special_bake_type
         maps = (
@@ -527,7 +546,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         for map in maps:
             if map[0] == 'NORMAL' and not object_has_nmaps:
                 continue
-            destination_dir = mytool.mesh_export_path + "/" + _subdir
+            destination_dir = self.mesh_export_path + "/" + _subdir
             destination_dir = re.sub(r'\\', '/', os.path.normpath(destination_dir)) + "/"
             if mytool.bake_multi_mat_into_single == 'OP2':
                 # create new image
@@ -576,7 +595,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                     bake_type = map[5]
                 else:
                     bake_type = map[0]
-                self.setup_bake(mytool, bake_type)
+                self.setup_bake(mytool, bake_type, render_samples)
                 
                 try:
                     if mytool.bake_multi_mat_into_single == 'OP2':
@@ -584,7 +603,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                     else:
                         bpy.ops.object.bake(type=bake_type, use_split_materials=True)
                 except RuntimeError:
-                    error_msg = 'Bake Error: Delete temporary "hpl3export_*" image datablocks and try again'
+                    error_msg = 'Bake Error: Check that the object(s) and its collection are enabled for rendering (camera icon), then delete temporary "hpl3export_*" image datablocks and try again'
                     self.report({'ERROR'}, "%s" % (error_msg))
                     error += 1
                     break
@@ -626,7 +645,10 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                 if not os.path.exists(destination_ent_no_ext + ".ent") or ent_error:
                     self.generate_ent(mytool, exp_meshes, destination_ent_no_ext)
         wm.progress_end()
+        
         bpy.context.scene.render.engine = render_engine
+        bpy.context.scene.cycles.samples = render_samples
+        
         if mytool.bake_multi_mat_into_single == 'OP2':
             current_obj.data.uv_layers.remove(new_uv)
         for image in images_to_export:
@@ -945,7 +967,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
     # ------------------------------------------------------------------------
     #    setup blender bake options for each map type
     # ------------------------------------------------------------------------
-    def setup_bake(self, mytool, bake_type):
+    def setup_bake(self, mytool, bake_type, render_samples):
         print("setting up bake")
         bpy.context.scene.render.engine = 'CYCLES'
         #bpy.context.scene.cycles.device = 'GPU'
@@ -961,7 +983,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             if mytool.bake_scene_lighting:
                 bake.use_pass_direct = True
                 bake.use_pass_indirect = True
-                bpy.context.scene.cycles.samples = 60
+                bpy.context.scene.cycles.samples = render_samples
             else:
                 bake.use_pass_direct = False
                 bake.use_pass_indirect = False
@@ -1047,7 +1069,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
     def export_mesh(self, mytool, current_obj, _subdir):
         print("Exporting mesh")
         # Get MESH name rather than object name
-        filepath = mytool.mesh_export_path + "/" + _subdir + "/" + re.sub(r'[^\w\-\s\.]+', '', current_obj.data.name) + ".dae"
+        filepath = self.mesh_export_path + "/" + _subdir + "/" + re.sub(r'[^\w\-\s\.]+', '', current_obj.data.name) + ".dae"
         filepath = os.path.normpath(filepath)
         
         # Save transformation
@@ -1289,9 +1311,9 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
     # ------------------------------------------------------------------------
     def delete_assets(self, mytool, shortname_list):
         leftover_files = []
-        SOMA_path = re.sub(r'\\SOMA\\.*', '', mytool.mesh_export_path)
+        SOMA_path = re.sub(r'\\SOMA\\.*', '', self.mesh_export_path)
         # If re.sub worked, add SOMA back to path
-        if SOMA_path != mytool.mesh_export_path:
+        if SOMA_path != self.mesh_export_path:
             SOMA_path = SOMA_path + "\\SOMA\\"
         else:
             # Don't prepend SOMA path
@@ -1436,15 +1458,18 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                 self.report({'ERROR'}, "%s" % (error_msg))
                 return {'FINISHED'}
 
-
-        
-        if not os.path.exists(mytool.mesh_export_path):
+        if mytool.entity_option == 'OP1':
+            self.mesh_export_path = mytool.statobj_export_path
+        else:
+            self.mesh_export_path = mytool.entity_export_path
+            
+        if not os.path.exists(self.mesh_export_path):
             error_msg = 'Asset Folder does not exist'
             self.report({'ERROR'}, "%s" % (error_msg))
             return {'FINISHED'}
         
         # Read blender asset use list xml
-        asset_xml_path = mytool.mesh_export_path + "/exportscript_asset_tracking.xml"
+        asset_xml_path = self.mesh_export_path + "/exportscript_asset_tracking.xml"
         try:
             self.asset_xml= ET.parse(asset_xml_path).getroot()
         except IOError:
@@ -1496,7 +1521,10 @@ class OBJECT_PT_HPL3_Export (Panel):
             obj_type_row.enabled = False
         
         layout.prop( mytool, "map_file_path")
-        layout.prop( mytool, "mesh_export_path")
+        if mytool.entity_option == 'OP1':
+            layout.prop( mytool, "statobj_export_path")
+        else:
+            layout.prop( mytool, "entity_export_path")
         bake_row_1 = layout.row(align=True)
         bake_row_2 = layout.row(align=True)
         layout.prop( mytool, "bake_multi_mat_into_single", text="Bake to")
