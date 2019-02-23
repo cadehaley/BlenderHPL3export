@@ -5,7 +5,7 @@ bl_info = {
     "name": "HPL3 Export",
     "description": "Export objects and materials directly into an HPL3 map",
     "author": "cadely",
-    "version": (1, 1, 0),
+    "version": (1, 2, 0),
     "blender": (2, 80, 0),
     "location": "3D View > Tools",
     "warning": "", # used for warning icon and text in addons panel
@@ -222,7 +222,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                 if mytool.map_file_path != "":
                     old_mod_time = self.add_object(mytool, current, subdir)
                 else:
-                    filepath = self.mesh_export_path + "/" + subdir + "/" + re.sub(r'[^\w\-\s\/\\\.]+', '', current.data.name) + ".dae"
+                    filepath = self.mesh_export_path + "/" + subdir + "/" + re.sub('[^0-9a-zA-Z]+', '_', current.data.name) + ".dae"
                     filepath = re.sub(r'\\', '/', os.path.normpath(filepath))
                     short_path = re.sub(r'.*\/SOMA\/', '', filepath)
                     self.get_asset_xml_entry(short_path)
@@ -283,9 +283,9 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         
         # Assemble .dae/ent path
         if is_ent:
-            filepath = self.mesh_export_path + "/" + _subdir + "/" + re.sub(r'[^\w\-\s\/\\\.]+', '', current_obj.data.name) + ".ent"
+            filepath = self.mesh_export_path + "/" + _subdir + "/" + re.sub('[^0-9a-zA-Z]+', '_', current_obj.data.name) + ".ent"
         else:
-            filepath = self.mesh_export_path + "/" + _subdir + "/" + re.sub(r'[^\w\-\s\/\\\.]+', '', current_obj.data.name) + ".dae"
+            filepath = self.mesh_export_path + "/" + _subdir + "/" + re.sub('[^0-9a-zA-Z]+', '_', current_obj.data.name) + ".dae"
         filepath = re.sub(r'\\', '/', os.path.normpath(filepath))
         short_path = re.sub(r'.*\/SOMA\/', '', filepath)
             
@@ -334,9 +334,22 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         # Get object name
         obj_name = current_obj.name
 
+        # Check object for an armature modifier
+        is_rigged = False
+        for mod in current_obj.modifiers:
+            if mod.type == 'ARMATURE':
+                is_rigged = True
+                break
         
         # Get world transforms, convert to Y-up
-        world_mat = current_obj.matrix_world
+        # If it's rigged, get skeleton transforms instead
+        if is_rigged and current_obj.parent is not None:
+            world_mat = current_obj.parent.matrix_world
+            rig_rot_x = mathutils.Matrix.Rotation(math.radians(180.0), 4, 'X')
+            rig_rot_y = mathutils.Matrix.Rotation(math.radians(180.0), 4, 'Y')
+            world_mat = world_mat @ rig_rot_x @ rig_rot_y
+        else:
+            world_mat = current_obj.matrix_world
         y_up_mat = mathutils.Matrix(((1,0,0,0), (0,0,1,0), (0,-1,0,0), (0,0,0,1)))
         local_rot_x = mathutils.Matrix.Rotation(math.radians(90.0), 4, 'X')
         new_mat = y_up_mat @ world_mat @ local_rot_x
@@ -470,7 +483,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         materials_used = False
         object_has_nmaps = False
             
-        name_no_ext = re.sub(r'\..*', '', current_obj.data.name)
+        export_name = re.sub('[^0-9a-zA-Z]+', '_', current_obj.data.name)
 
         bpy.context.view_layer.objects.active = current_obj
         if len(current_obj.material_slots) is 0:
@@ -550,18 +563,18 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             destination_dir = re.sub(r'\\', '/', os.path.normpath(destination_dir)) + "/"
             if mytool.bake_multi_mat_into_single == 'OP2':
                 # create new image
-                bake_name = "hpl3export_" + name_no_ext + map[1]
+                bake_name = "hpl3export_" + export_name + map[1]
                 bpy.ops.image.new(name=bake_name, width=mytool.map_res_x, height=mytool.map_res_y)
                 bake_image = bpy.context.blend_data.images[bake_name]
                 if map[2]:
-                    destination_dds = destination_dir + name_no_ext + map[1] + ".dds"
-                    images_to_export.append((bake_image, destination_dds, map[0], name_no_ext))
+                    destination_dds = destination_dir + export_name + map[1] + ".dds"
+                    images_to_export.append((bake_image, destination_dds, map[0], export_name))
 
             # Loop through materials doing PRE-BAKE operations
             temp_bake_nodes = []
             for mat in temp_materials:
                 matname_clean = re.sub('[^0-9a-zA-Z]+', '_', mat.name)
-                targa_name = destination_dir + name_no_ext
+                targa_name = destination_dir + export_name
                 principled_node = None
                 for node in mat.node_tree.nodes:
                     if (node.type == 'BSDF_PRINCIPLED'):
@@ -638,12 +651,12 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             
             # generate .ent
             if mytool.entity_option == "OP2":
-                destination_ent_no_ext = destination_dir + name_no_ext
+                destination_ent_no_ext = destination_dir + export_name
                 ent_error = 0
                 if os.path.exists(destination_ent_no_ext + ".ent"):
                     ent_error = self.update_ent(mytool, exp_meshes, destination_ent_no_ext)
                 if not os.path.exists(destination_ent_no_ext + ".ent") or ent_error:
-                    self.generate_ent(mytool, exp_meshes, destination_ent_no_ext)
+                    self.generate_ent(mytool, exp_meshes, destination_ent_no_ext, current_obj)
         wm.progress_end()
         
         bpy.context.scene.render.engine = render_engine
@@ -1069,20 +1082,31 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
     def export_mesh(self, mytool, current_obj, _subdir):
         print("Exporting mesh")
         # Get MESH name rather than object name
-        filepath = self.mesh_export_path + "/" + _subdir + "/" + re.sub(r'[^\w\-\s\.]+', '', current_obj.data.name) + ".dae"
+        filepath = self.mesh_export_path + "/" + _subdir + "/" + re.sub('[^0-9a-zA-Z]+', '_', current_obj.data.name) + ".dae"
         filepath = os.path.normpath(filepath)
+        
+        # Check object for an armature modifier
+        is_rigged = False
+        for mod in current_obj.modifiers:
+            if mod.type == 'ARMATURE':
+                is_rigged = True
+                break
+            
+        if is_rigged and current_obj.parent is not None:
+            # Switch to armature object
+            original_obj = current_obj
+            current_obj = original_obj.parent  
+        else:
+            # Create new mesh datablock with modifiers applied
+            original_mesh = current_obj.data
+            apply_modifiers = True
+            mod_mesh = current_obj.to_mesh(bpy.context.depsgraph, apply_modifiers)
+            current_obj.data = mod_mesh
         
         # Save transformation
         loc = current_obj.location[:]
         rot = current_obj.rotation_euler[:]
         scale = current_obj.scale[:]
-        
-        # Create new mesh datablock with modifiers applied
-        original_mesh = current_obj.data
-        apply_modifiers = True
-        mod_mesh = current_obj.to_mesh(bpy.context.depsgraph, apply_modifiers)
-        current_obj.data = mod_mesh
-        
             
         # Deselect all and select object
         for ob in bpy.context.selected_objects:
@@ -1092,10 +1116,36 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         # Zero out transformation
         current_obj.lock_location = current_obj.lock_rotation = current_obj.lock_scale = (False, False, False)
         current_obj.location = (0, 0, 0)#new_loc
-        current_obj.rotation_euler = (0, 0, math.radians(180))
+        current_obj.rotation_euler = (0, 0, math.radians(180) * (not is_rigged))
         current_obj.scale = (1, 1, 1)#new_scale
         bpy.ops.object.transform_apply(rotation = True)
-        
+        if is_rigged:
+            #current_obj.rotation_euler = (0, 0, math.radians(180))
+            #original_obj.rotation_euler = (0, math.radians(180), 0)
+            current_obj = original_obj
+            # Deselect all and select object
+            for ob in bpy.context.selected_objects:
+                ob.select_set(False)
+            current_obj.select_set(True)
+            
+        if is_rigged and current_obj.parent is not None:
+            # Clear parenting inverse
+            parent = current_obj.parent
+            bpy.ops.object.parent_clear(type='CLEAR_KEEP_TRANSFORM')
+            parent.select_set(True)
+            bpy.context.view_layer.objects.active = parent
+            bpy.ops.object.parent_set()
+            # Save transformation
+            #orig_loc = current_obj.location[:]
+            #orig_rot = current_obj.rotation_euler[:]
+            #orig_scale = current_obj.scale[:]
+            # Apply mesh transforms
+            for ob in bpy.context.selected_objects:
+                ob.select_set(False)
+            current_obj.select_set(True)
+            bpy.context.view_layer.objects.active = current_obj
+            bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+            
         # Duplicate to new object
         if mytool.bake_multi_mat_into_single == 'OP2':
             cur = bpy.context.active_object
@@ -1130,11 +1180,11 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             bm.to_mesh(mesh)
             bm.free()
             exp_meshes.append((ob.name, len(mesh.polygons)))
-        
+
         # Export
         bpy.ops.wm.collada_export(
             filepath=filepath, 
-            apply_modifiers=True, 
+            apply_modifiers=not is_rigged, 
             selected=True, 
             include_children=True, 
             include_armatures=True, 
@@ -1146,10 +1196,22 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             )
 
         bpy.ops.object.delete()
-
-        # Remove temp mesh datablock
-        current_obj.data = original_mesh
-        bpy.data.meshes.remove(mod_mesh)
+        
+        
+        if is_rigged and current_obj.parent is not None:
+            # Restore transformation
+            #current_obj.location = orig_loc
+            #current_obj.rotation_euler = orig_rot
+            #current_obj.scale = orig_scale
+            current_obj.location = (0, 0, 0)#new_loc
+            current_obj.rotation_euler = (0, 0, 0)
+            current_obj.scale = (1, 1, 1)#new_scale
+            # Switch to clearing armature's transform
+            current_obj = current_obj.parent
+        else:
+            # Remove temp mesh datablock
+            current_obj.data = original_mesh
+            bpy.data.meshes.remove(mod_mesh)
         
         # Restore transformation
         current_obj.location = loc
@@ -1230,6 +1292,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
     # ------------------------------------------------------------------------
     def update_ent(self, mytool, exp_meshes, destination_ent_no_ext):
         print(".ent exists, updating")
+        
         output = destination_ent_no_ext + ".ent"
         short_path = re.sub(r'.*\/SOMA\/', '', destination_ent_no_ext + ".dae")
         try:
@@ -1268,7 +1331,14 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
     #        exp_meshes = (mesh_name, triangle_count)
     #        destination_ent_no_ext = path without ".ent"
     # ------------------------------------------------------------------------
-    def generate_ent(self, mytool, exp_meshes, destination_ent_no_ext):
+    def generate_ent(self, mytool, exp_meshes, destination_ent_no_ext, current_obj):
+        # Check object for an armature modifier
+        is_rigged = False
+        for mod in current_obj.modifiers:
+            if mod.type == 'ARMATURE':
+                is_rigged = True
+                break
+        
         print("Exporting .ent")
         output = destination_ent_no_ext + ".ent"
         
@@ -1292,6 +1362,11 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             submesh.attrib["TriCount"] = str(exp_mesh[1])
             submesh.attrib["Material"] = ""
         bones = ET.SubElement(model_data, "Bones")
+        # Add a dummy bone to cause model viewer to re-associate
+        if is_rigged:
+            dummy_bone = ET.SubElement(bones, "Bone")
+            dummy_bone.attrib["ID"] = "1"
+            dummy_bone.attrib["Name"] = "dummy"
         shapes = ET.SubElement(model_data, "Shapes")
         bodies = ET.SubElement(model_data, "Bodies")
         joints = ET.SubElement(model_data, "Joints")
