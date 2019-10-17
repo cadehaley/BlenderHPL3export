@@ -1,4 +1,4 @@
-HPL3 Exporter Version 1.2
+HPL3 Exporter Version 1.3
 ==============================================================================
 ![](https://i.imgur.com/jmKXD4F.jpg)
 
@@ -69,4 +69,4 @@ Bugs
 ------------------------------------------------------------------------------
 
 For any questions or to report any bugs, message me @cadely on the [Frictional 
-Games unofficial Discord](https://discord.gg/sXKZ9R2) or on [frictionalgames.com/forum](frictionalgames.com/forum)
+Games Discord](https://discordapp.com/invite/frictionalgames) or on [frictionalgames.com/forum](frictionalgames.com/forum)

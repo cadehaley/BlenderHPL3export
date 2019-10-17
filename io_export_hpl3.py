@@ -5,7 +5,7 @@ bl_info = {
     "name": "HPL3 Export",
     "description": "Export objects and materials directly into an HPL3 map",
     "author": "cadely",
-    "version": (1, 2, 0),
+    "version": (1, 3, 0),
     "blender": (2, 80, 0),
     "location": "3D View > Tools",
     "warning": "", # used for warning icon and text in addons panel
@@ -49,9 +49,8 @@ class HPL3_Export_Properties (PropertyGroup):
     
     def update_map_path(self, context):
         if self["map_file_path"] != "":
-            noslash = re.sub(r'\\\\', '', self["map_file_path"])
-            abspath = os.path.abspath(noslash)
-            self["map_file_path"] = abspath
+            no_double_slash = re.sub(r'\\\\|//', '', self["map_file_path"])
+            self["map_file_path"] = os.path.abspath(no_double_slash)
     
     map_file_path : StringProperty(
         name="Map File",
@@ -63,9 +62,8 @@ class HPL3_Export_Properties (PropertyGroup):
         )
     
     def update_entity_path(self, context):
-        noslash = re.sub(r'\\\\', '', self["entity_export_path"])
-        abspath = os.path.abspath(noslash)
-        self["entity_export_path"] = abspath
+        no_double_slash = re.sub(r'\\\\|//', '', self["entity_export_path"])
+        self["entity_export_path"] = os.path.abspath(no_double_slash)
 
     entity_export_path : StringProperty(
         name="Entities Folder",
@@ -77,9 +75,8 @@ class HPL3_Export_Properties (PropertyGroup):
         )
 
     def update_statobj_path(self, context):
-        noslash = re.sub(r'\\\\', '', self["statobj_export_path"])
-        abspath = os.path.abspath(noslash)
-        self["statobj_export_path"] = abspath
+        no_double_slash = re.sub(r'\\\\|//', '', self["statobj_export_path"])
+        self["statobj_export_path"] = os.path.abspath(no_double_slash)
 
     statobj_export_path : StringProperty(
         name="Static Objects Folder",
@@ -111,7 +108,7 @@ class HPL3_Export_Properties (PropertyGroup):
         base_2 = max(min(base_2, 14), 0)
         result = int(math.pow(2, base_2))
         self["map_res_x"] = result
-        if self["square_resolution"]:
+        if self.square_resolution:
           self["map_res_y"] = result
     
     def update_res_y_pow2(self, context):
@@ -121,8 +118,7 @@ class HPL3_Export_Properties (PropertyGroup):
         self["map_res_y"] = result
         if self["square_resolution"]:
           self["map_res_x"] = result
-
-            
+  
     map_res_x : IntProperty(
         name = "X",
         description="A integer property",
@@ -144,8 +140,8 @@ class HPL3_Export_Properties (PropertyGroup):
         )
     
     sync_blender_deletions : BoolProperty(
-        name="Remove Missing Objects (Read Description)",
-        description="If objects previously exported with this tool exist in the HPL3 map but not the current Blender scene, delete them from the map and disk. WARNING: Will erase .dds, .ent, .dae, and .mat files even if they have been modified since the export",
+        name="Clean Up Missing Objects (Read Description)",
+        description="If objects previously exported with this tool exist in the HPL3 map but not the current Blender scene, delete them from the map and disk. WARNING: Will erase .dds, .ent, .dae, and .mat files even if they have been modified since the last export",
         default = False
         )
 
@@ -345,14 +341,14 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         # If it's rigged, get skeleton transforms instead
         if is_rigged and current_obj.parent is not None:
             world_mat = current_obj.parent.matrix_world
-            rig_rot_x = mathutils.Matrix.Rotation(math.radians(180.0), 4, 'X')
-            rig_rot_y = mathutils.Matrix.Rotation(math.radians(180.0), 4, 'Y')
-            world_mat = world_mat @ rig_rot_x @ rig_rot_y
         else:
             world_mat = current_obj.matrix_world
-        y_up_mat = mathutils.Matrix(((1,0,0,0), (0,0,1,0), (0,-1,0,0), (0,0,0,1)))
-        local_rot_x = mathutils.Matrix.Rotation(math.radians(90.0), 4, 'X')
-        new_mat = y_up_mat @ world_mat @ local_rot_x
+        
+        # Reorder vector columns such that Blender X = HPL Z, Blender Y = HPL X, Blender Z = HPL Y
+        column_reorder = mathutils.Matrix(((0,1,0,0), (0,0,1,0), (1,0,0,0), (0,0,0,1)))
+        y_up_mat = mathutils.Matrix(((0,-1,0,0), (1,0,0,0), (0,0,1,0), (0,0,0,1)))
+        local_rot_y = mathutils.Matrix.Rotation(math.radians(90.0), 4, 'Y')
+        new_mat = column_reorder @ world_mat @ local_rot_y @ y_up_mat
         loc, rot, scale = new_mat.decompose()
         rot = rot.to_euler()
         
@@ -484,7 +480,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         object_has_nmaps = False
             
         export_name = re.sub('[^0-9a-zA-Z]+', '_', current_obj.data.name)
-
+        
         bpy.context.view_layer.objects.active = current_obj
         if len(current_obj.material_slots) is 0:
             print("create new slot")
@@ -508,16 +504,17 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                     mat.use_nodes = True
                     principled_name = "Principled BSDF"
                     # Copy base, spec, and roughness
-                    mat.node_tree.nodes[principled_name].inputs[0].default_value = (orig_mat.diffuse_color[0], orig_mat.diffuse_color[1], orig_mat.diffuse_color[2], 1)
-                    mat.node_tree.nodes[principled_name].inputs[5].default_value = orig_mat.specular_intensity
-                    mat.node_tree.nodes[principled_name].inputs[7].default_value = orig_mat.roughness
+                    mat.node_tree.nodes[principled_name].inputs["Base Color"].default_value = (orig_mat.diffuse_color[0], orig_mat.diffuse_color[1], orig_mat.diffuse_color[2], 1)
+                    mat.node_tree.nodes[principled_name].inputs["Specular"].default_value = orig_mat.specular_intensity
+                    mat.node_tree.nodes[principled_name].inputs["Roughness"].default_value = orig_mat.roughness
                 else:
                     mat = orig_mat.copy()
                     mat.name = "hpl3export_" + mat.name
                     if not object_has_nmaps:
-                        object_has_nmaps = mat.node_tree.nodes[principled_name].inputs[17].is_linked
+                        object_has_nmaps = mat.node_tree.nodes[principled_name].inputs["Normal"].is_linked
                 temp_materials.append(mat)
                 slot.material = mat
+        
 
         if not materials_used:
             # new mat in slot 0
@@ -531,14 +528,14 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             ob.select_set(False)
         current_obj.select_set(True)
 
-        if mytool.bake_multi_mat_into_single == 'OP2':
-            if len(current_obj.data.uv_layers) is not 0:
-                # save active uv map
-                cur_uv = current_obj.data.uv_layers[0]
+        if mytool.bake_multi_mat_into_single == 'OP2':                
             # create new called "hpl3uv", select, and unwrap w/o stretching to uv bounds
             new_uv = current_obj.data.uv_layers.new(name="hpl3uv")
             current_obj.data.uv_layers.active = new_uv
             bpy.ops.uv.smart_project(angle_limit=85.0, island_margin = 0.02, use_aspect=False, stretch_to_bounds=False)
+        elif len(current_obj.data.uv_layers) is 0:
+            # Make a new UV layer
+            current_obj.data.uv_layers.new()
 
         render_engine = bpy.context.scene.render.engine
         if render_engine == "BLENDER_EEVEE":
@@ -546,17 +543,18 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         else:
             render_samples = bpy.context.scene.cycles.samples
         
-        # bake type, suffix, is_exportable, is_bakeable, socket_num, special_bake_type
+        # bake type, suffix, is_exportable, is_bakeable, socket_name, special_bake_type
         maps = (
-        ('ROUGHNESS', '_rough',   False, True,  7, ''),
-        ('PRESPEC',   '_prespec', False, True,  5, 'DIFFUSE'),
-        ('SPECULAR',  '_spec',    True,  False, -1, ''),
-        ('NORMAL',    '_nrm',     True,  True,  17, ''),
-        ('DIFFUSE',   '',         True,  True,  0, '')
+        ('ROUGHNESS', '_rough',   False, True,  'Roughness', ''),
+        ('PRESPEC',   '_prespec', False, True,  'Specular', 'DIFFUSE'),
+        ('SPECULAR',  '_spec',    True,  False, 'Specular', ''),
+        ('NORMAL',    '_nrm',     True,  True,  'Normal', ''),
+        ('DIFFUSE',   '',         True,  True,  'Base Color', '')
         )
         
         images_to_export = [] # image datablock, export path, type, material name
         for map in maps:
+            
             if map[0] == 'NORMAL' and not object_has_nmaps:
                 continue
             destination_dir = self.mesh_export_path + "/" + _subdir
@@ -569,9 +567,10 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                 if map[2]:
                     destination_dds = destination_dir + export_name + map[1] + ".dds"
                     images_to_export.append((bake_image, destination_dds, map[0], export_name))
-
+            
             # Loop through materials doing PRE-BAKE operations
             temp_bake_nodes = []
+            
             for mat in temp_materials:
                 matname_clean = re.sub('[^0-9a-zA-Z]+', '_', mat.name)
                 targa_name = destination_dir + export_name
@@ -580,16 +579,16 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                     if (node.type == 'BSDF_PRINCIPLED'):
                         principled_node = node
                 # Set metallic to 0
-                principled_node.inputs[4].default_value = 0
+                principled_node.inputs["Metallic"].default_value = 0
                 # add node, select it
-                node = mat.node_tree.nodes.new("ShaderNodeTexImage")
-                mat.node_tree.nodes.active = node
-                node_setup = (mat.node_tree, node, principled_node)
+                new_img_node = mat.node_tree.nodes.new("ShaderNodeTexImage")
+                mat.node_tree.nodes.active = new_img_node
+                node_setup = (mat.node_tree, new_img_node, principled_node)
                 if mytool.bake_multi_mat_into_single == 'OP2':
                     # Connect "hpl3uv" UV map
                     uv_node = mat.node_tree.nodes.new("ShaderNodeUVMap")
                     uv_node.uv_map = "hpl3uv"
-                    mat.node_tree.links.new(uv_node.outputs[0], node.inputs[0])
+                    mat.node_tree.links.new(uv_node.outputs[0], new_img_node.inputs[0])
                 else:
                     targa_name = destination_dir + matname_clean
                     res_x, res_y = self.get_optimal_image_size(mytool, principled_node.inputs[map[4]])
@@ -599,7 +598,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                     if map[2]: # If map is exportable
                         destination_dds = destination_dir + matname_clean + map[1] + ".dds"
                         images_to_export.append((bake_image, destination_dds, map[0], matname_clean))
-                node.image = bake_image
+                new_img_node.image = bake_image
                 temp_bake_nodes.append(node_setup)
                 self.do_special_map_operation(mytool, map[0], False, node_setup, targa_name)
             
@@ -624,14 +623,15 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             # Loop through materials doing POST-BAKE operations
             for node_setup in temp_bake_nodes:
                 self.do_special_map_operation(mytool, map[0], True, node_setup, "")
-                
+             
             progress += 10
             wm.progress_update(progress)
-
+        
         if not error:
             for image in images_to_export:
                 # export
-                self.check_new_and_export(mytool, _old_mod_time, image, requested_dds_paths)
+                error = self.exportfile(mytool, image)
+                requested_dds_paths.append(re.sub(r'.*\/SOMA\/', '', image[1]))
                 # hook diffuse images up to exported file
                 if image[2] == 'DIFFUSE':
                     image[0].source = 'FILE'
@@ -671,7 +671,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         for mat in orig_materials:
             current_obj.material_slots[mat[0]].material = mat[1]
         for mat in temp_materials:
-            bpy.context.blend_data.materials.remove(mat)
+            bpy.data.materials.remove(mat)
 
     ####
         
@@ -723,9 +723,14 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             base_2 = round(math.log(max_res_x,2))
             base_2 = max(min(base_2, 14), 0)
             max_res_x = int(math.pow(2, base_2))
+            # Limit to max bake size x
+            max_res_x = min(max_res_x, mytool.map_res_x)
+            
             base_2 = round(math.log(max_res_y,2))
             base_2 = max(min(base_2, 14), 0)
             max_res_y = int(math.pow(2, base_2))
+            # Limit to max bake size y
+            max_res_y = min(max_res_y, mytool.map_res_y)
         else:
             max_res_x = mytool.map_res_x
             max_res_y = mytool.map_res_y
@@ -735,7 +740,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
     #    for each map type, set up nodes for baking
     #        bake_type    - map type, e.g. "DIFFUSE"
     #        post_bake    - False if function is called before bake is initiated
-    #        node_setup   - list (node_tree, node, principled_node)
+    #        node_setup   - list (node_tree, new_img_node, principled_node)
     #        targa_export - export path for temporary targa files
     # ------------------------------------------------------------------------
     def do_special_map_operation(self, mytool, bake_type, post_bake, node_setup, targa_export):
@@ -746,10 +751,10 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             
     ##Pre-specular
         elif bake_type == 'PRESPEC':
-            spec_socket = node_setup[2].inputs[5]
-            diff_socket = node_setup[2].inputs[0]
+            spec_socket = node_setup[2].inputs["Specular"]
+            diff_socket = node_setup[2].inputs["Base Color"]
             if not post_bake:
-                # Move specular nodes plug from specular to roughness socket
+                # If diff socket is linked, change the name and label
                 if diff_socket.is_linked:
                     diff_socket.links[0].from_node.name = "HPL3_ORIGINALDIFF"
                     diff_socket.links[0].from_node.label = diff_socket.links[0].from_socket.name
@@ -771,21 +776,25 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                 # Set up a diffuse bake
                 #set_up_bake(node_setup, 'DIFFUSE')
             else: # Post-bake
+                # BEWARE: Naming a node "HPL3_ORIGINALDIFF" will connect it even if was originally disconnected
                 original_diff = None
                 for node in node_setup[0].nodes:
                     if node.name == "HPL3_ORIGINALDIFF":
                         original_diff = node
-                if original_diff is None:
-                    node_setup[0].nodes.remove(node_setup[0].nodes["HPL3_RGB"])
-                else: # Re-link original diffuse node setup
+                if original_diff is not None: # Re-link original diffuse node setup
                     original_socket = None
                     for socket in original_diff.outputs:
                         if socket.name == original_diff.label:
                             original_socket = socket
                     node_setup[0].links.new(original_socket, diff_socket)
+                else:
+                    node = node_setup[0].nodes.new("ShaderNodeRGB")
+                    diff_color = diff_socket.default_value
+                    node.outputs[0].default_value = (diff_color[0], diff_color[1], diff_color[2], 1.0)
+                    node.name = "HPL3_DIFF_RGB"
+                    node_setup[0].links.new(node.outputs[0], diff_socket)
                 # rename node
                 node_setup[1].label = 'HPL3_SPEC'
-
                 
     ##Specular    
         elif bake_type == 'SPECULAR' and not post_bake:
@@ -945,7 +954,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
 
     ##Normal
         elif bake_type == 'NORMAL' and not post_bake:
-            normal_socket = node_setup[2].inputs[17]
+            normal_socket = node_setup[2].inputs[19]
             if normal_socket.is_linked:
                 if (type(normal_socket.links[0].from_node) == bpy.types.ShaderNodeTexImage):
                     # User mistake, place a normal map node in between
@@ -969,7 +978,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                 for node in node_list:
                     if (type(node) == bpy.types.ShaderNodeTexImage):
                         if(node.image is not None):
-                            node.color_space = 'NONE'
+                            node.image.colorspace_settings.name = 'Non-Color'
 
 
     ## Diffuse
@@ -1010,35 +1019,6 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         bake.margin = 16
         bake.use_clear = True
         bake.use_selected_to_active = False
-      
-    # ------------------------------------------------------------------------
-    #    determine if textures need to be updated and export them
-    #        _old_mod_time       - last time map entry was modified
-    #        image               - list (image datablock, export path, type)
-    #        requested_dds_paths - image filepaths, to be used for asset tracking
-    # ------------------------------------------------------------------------
-    def check_new_and_export(self, mytool, _old_mod_time, image, requested_dds_paths):
-        print("sent to export " + image[0].name)
-        if image[0].source == 'FILE':
-            filepath = bpy.path.abspath(image[0].filepath)
-            if os.path.exists(filepath): #If original image exists
-                file_mod_time = int(os.path.getmtime(filepath))
-            else:
-                print("WARNING: Original image file '" + filepath + "' missing, generating new")
-                file_mod_time = math.inf
-        else: # If image is generated or something else
-            file_mod_time = math.inf
-            
-        #Check if the source texture is newer than last .dds export or if it's missing
-        if file_mod_time > _old_mod_time or not os.path.exists(image[1]):
-            #Export the texture
-            error = self.exportfile(mytool, image)
-        else:
-            print("\tTexture already current, skipping export")
-            error = 0
-        
-        if not error:
-            requested_dds_paths.append(re.sub(r'.*\/SOMA\/', '', image[1]))
             
     # ------------------------------------------------------------------------
     #    export image and convert to DDS
@@ -1046,12 +1026,10 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
     # ------------------------------------------------------------------------
     def exportfile(self, mytool, image):
         filepath_no_ext = re.sub(r'\..*', '', image[1])
-
-        if (image[0].source == 'FILE') and (os.path.exists(filepath_no_ext+".dds")):
-            os.remove(filepath_no_ext+'.dds')
         bpy.context.scene.render.image_settings.file_format = 'TARGA'
         bpy.context.scene.render.image_settings.color_mode = 'RGBA'
         tga_file = filepath_no_ext+'.tga'
+        dds_file = filepath_no_ext+".dds"
         try:
             image[0].save_render(tga_file)
         except RuntimeError:
@@ -1059,18 +1037,34 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             if 'missing' not in bpy.data.images:
                     bpy.ops.image.new(name='missing', width=2, height=2, color=(1,0,1,1))
             bpy.data.images['missing'].save_render(tga_file)
+        except PermissionError:
+            message = "Permission denied writing " + tga_file
+            print(message)
+            return 1
+            #self.report({'WARNING'}, "%s" % (message))
         # Export DDS
         if image[2] == 'NORMAL':
             params=" -normal -bc5 "
         else:
             params=" -alpha -bc3 "
-        input = tga_file
-        output = filepath_no_ext+".dds"
-        output2='"'+output+'"'
-        input2='"'+input+'"'
-        error = os.system('"'+self.CONVERTERPATH+params+" "+input2+" "+output2+'"')  
-        print("SET TO REMOVE ", filepath_no_ext+'.tga')
-        os.remove(filepath_no_ext+'.tga')
+        output2='"'+dds_file+'"'
+        input2='"'+tga_file+'"'
+        error = True
+        try:
+            if (image[0].source == 'FILE') and (os.path.exists(dds_file)):
+                    os.remove(dds_file)
+            error = os.system('"'+self.CONVERTERPATH+params+" "+input2+" "+output2+'"')  
+        except PermissionError:
+            message = "Permission denied removing " + dds_file
+            print(message)
+            #self.report({'WARNING'}, "%s" % (message))
+        print("REMOVING ", tga_file)
+        os.remove(tga_file)
+
+        if error:
+            message = "Failed to write " + dds_file
+            print(message)
+            #self.report({'WARNING'}, "%s" % (message))
         
         return error
 
@@ -1087,6 +1081,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         
         # Check object for an armature modifier
         is_rigged = False
+        depsgraph = bpy.context.evaluated_depsgraph_get()
         for mod in current_obj.modifiers:
             if mod.type == 'ARMATURE':
                 is_rigged = True
@@ -1099,8 +1094,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         else:
             # Create new mesh datablock with modifiers applied
             original_mesh = current_obj.data
-            apply_modifiers = True
-            mod_mesh = current_obj.to_mesh(bpy.context.depsgraph, apply_modifiers)
+            mod_mesh = bpy.data.meshes.new_from_object(current_obj.evaluated_get(depsgraph), preserve_all_data_layers=True, depsgraph=depsgraph)
             current_obj.data = mod_mesh
         
         # Save transformation
@@ -1113,15 +1107,11 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             ob.select_set(False)
         current_obj.select_set(True)
         
-        # Zero out transformation
-        current_obj.lock_location = current_obj.lock_rotation = current_obj.lock_scale = (False, False, False)
-        current_obj.location = (0, 0, 0)#new_loc
-        current_obj.rotation_euler = (0, 0, math.radians(180) * (not is_rigged))
-        current_obj.scale = (1, 1, 1)#new_scale
+        # Convert to maya coordinates and zero out transforms
+        y_up_mat = mathutils.Matrix(((0,-1,0,0), (1,0,0,0), (0,0,1,0), (0,0,0,1)))
+        current_obj.matrix_world = y_up_mat
         bpy.ops.object.transform_apply(rotation = True)
         if is_rigged:
-            #current_obj.rotation_euler = (0, 0, math.radians(180))
-            #original_obj.rotation_euler = (0, math.radians(180), 0)
             current_obj = original_obj
             # Deselect all and select object
             for ob in bpy.context.selected_objects:
@@ -1135,10 +1125,6 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             parent.select_set(True)
             bpy.context.view_layer.objects.active = parent
             bpy.ops.object.parent_set()
-            # Save transformation
-            #orig_loc = current_obj.location[:]
-            #orig_rot = current_obj.rotation_euler[:]
-            #orig_scale = current_obj.scale[:]
             # Apply mesh transforms
             for ob in bpy.context.selected_objects:
                 ob.select_set(False)
@@ -1199,10 +1185,6 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         
         
         if is_rigged and current_obj.parent is not None:
-            # Restore transformation
-            #current_obj.location = orig_loc
-            #current_obj.rotation_euler = orig_rot
-            #current_obj.scale = orig_scale
             current_obj.location = (0, 0, 0)#new_loc
             current_obj.rotation_euler = (0, 0, 0)
             current_obj.scale = (1, 1, 1)#new_scale
@@ -1514,8 +1496,6 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             return {'FINISHED'}
         
         # Read map static objects/entity file
-        #map_file_path = os.path.abspath(mytool.map_file_path)
-        #print(map_file_path)
         if mytool.entity_option == 'OP2':
             map_file_path = mytool.map_file_path + "_Entity"
         else:
@@ -1628,14 +1608,21 @@ class OBJECT_PT_HPL3_Export (Panel):
             bake_row_2 = col.row(align=True)
             bake_row_3 = col.row(align=True)
             option_row_4 = col.row(align=True)
-
-            bake_row_1.label(text="Bake Size:")
+            
+            multi_mat = mytool.bake_multi_mat_into_single == 'OP1'
+            single_mat = mytool.bake_multi_mat_into_single == 'OP2'
+            
+            if single_mat:
+                bake_row_1.label(text="Bake Size:")
+            else:
+                bake_row_1.label(text="Max Bake Size:")
             bake_row_1.prop( mytool, "square_resolution" )
             bake_row_2.prop( mytool, "map_res_x" )
             bake_row_2.prop( mytool, "map_res_y" )
             bake_row_3.prop( mytool, "bake_scene_lighting")
             option_row_4.prop( mytool, "sync_blender_deletions")
-            if mytool.bake_multi_mat_into_single == 'OP2':
+            
+            if single_mat or multi_mat:
                 bake_row_1.enabled = True
                 bake_row_2.enabled = True
             else:
