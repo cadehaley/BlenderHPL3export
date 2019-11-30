@@ -1,13 +1,13 @@
-HPL3 Exporter Version 1.3
+HPL3 Exporter Version 2.0
 ==============================================================================
-![](https://i.imgur.com/jmKXD4F.jpg)
+![](https://i.imgur.com/OQY35kC.jpg)
 
 This addon allows you to model anything from single assets 
 to entire maps within Blender, and synchronize them to an HPL3 engine map, 
 automatically creating and configuring textures, material, and entity files 
 for a fast iteration process. The script is also capable of removing objects 
-from the HPL3 map which have been removed in the Blender scene, and baking 
-lighting onto scene objects.
+from the HPL3 map which have been removed in the Blender scene, exporting
+rigged and animated objects, and baking lighting onto scene objects.
 
 Installation (Requires Blender 2.8 or later)
 ------------------------------------------------------------------------------
@@ -39,25 +39,30 @@ On export, the subdirectory and mesh file will take this name ("Suzanne.dae"),
 The "Object Name" does not matter as much, and will be used to name that 
 instance of the object when placed in the map.
 
-- If texture is black or has black parts, make sure UV faces are
-within the square UV boundary. Texture baking requires that each material use
- a single `Principled BSDF` node and that all UV faces lie within UV 
-coordinate bounds.
+- **Rigged Meshes**: Use "Single Export" when you have an animated mesh broken
+into separate objects (e.g. shirt, head, hair) that are deformed by the same 
+armature (skeleton). Exporting meshes that are deformed by different armatures
+to one file/entity is not supported by HPL3 and will produce unexpected results.
 
-- When baking multi-material, think of each material as having 
-its own UV set. Faces assigned to Material A cannot overlap in the UV editor 
-with other Material A faces, though it is ok (even recommended) for faces 
-assigned to Material B to use up the full UV space, since it won't matter 
-if a face from Material A overlaps with a face from Material B. Just make 
-sure your mesh only uses one UV map. Check this by going to
- `Object Data (Poly Triangle Icon) > UV Maps`, located under Vertex Groups 
-and Shape Keys.
+- **One Texture Set Per Material**: When baking multi-material, think of each 
+material as having its own UV set. Faces assigned to Material A cannot overlap
+in the UV editor with other Material A faces, though it is ok (even recommended) 
+for faces assigned to Material B to use up the full UV space, since it won't 
+matter if a face from Material A overlaps with a face from Material B.
 
-- Use `Alt+D` to create copies of an object in Blender to place 
+- **Instancing**: Use `Alt+D` to create copies of an object in Blender to place 
 around a map, since they will point to the same "Mesh" datablock. Using 
 Copy/Paste or Shift+D creates a new "Mesh" datablock every time, and therefore 
 a new .dae and .dds file on export, leaving you with multiple repeat numbered
  .dae and/or .dds files taking unnecessary space on export.
+
+Troubleshooting
+------------------------------------------------------------------------------
+
+- If texture is black or has black parts, make sure UV faces are
+within the square UV boundary. Texture baking requires that each material use
+ a single `Principled BSDF` node and that all UV faces lie within UV 
+coordinate bounds.
 
 - In the Level Editor, if objects fail to appear after pressing 
 the button to reload static object or entity changes, try exiting out of the 
