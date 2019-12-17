@@ -1,4 +1,4 @@
-HPL3 Exporter Version 2.0
+HPL3 Exporter Version 2.1
 ==============================================================================
 ![](https://i.imgur.com/OQY35kC.jpg)
 
