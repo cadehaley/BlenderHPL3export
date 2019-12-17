@@ -49,7 +49,7 @@ class HPL3_Export_Properties (PropertyGroup):
     add_bodies : BoolProperty(
         name="Add Basic Physics Bodies",
         description="Create a cube body around each subobject which matches the dimensions of the object's bounding box",
-        default = True
+        default = False
     )
     
     def update_map_path(self, context):
