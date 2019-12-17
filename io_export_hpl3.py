@@ -5,7 +5,7 @@ bl_info = {
     "name": "HPL3 Export",
     "description": "Export objects and materials directly into an HPL3 map",
     "author": "cadely",
-    "version": (2, 0, 0),
+    "version": (2, 1, 0),
     "blender": (2, 80, 0),
     "location": "3D View > Tools",
     "warning": "", # used for warning icon and text in addons panel
@@ -46,6 +46,11 @@ class HPL3_Export_Properties (PropertyGroup):
     is_occluder : BoolProperty(name="Is Occluder", default = True)
     distance_culling : BoolProperty(name="Distance Culling", default = True)
     culled_by_fog : BoolProperty(name="Culled By Fog", default = True)
+    add_bodies : BoolProperty(
+        name="Add Basic Physics Bodies",
+        description="Create a cube body around each subobject which matches the dimensions of the object's bounding box",
+        default = True
+    )
     
     def update_map_path(self, context):
         if self["map_file_path"] != "":
@@ -229,15 +234,16 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         for ob in self.selected:
             if ob.type != "MESH" and ob.type != "ARMATURE":
                 ob.select_set(False)
-            ob["hpl3export_obj_name"] = re.sub('[^0-9a-zA-Z]+', '_', ob.name)
-            ob["hpl3export_is_active"] = "FALSE"
-            ob["hpl3export_mesh_name"] = re.sub('[^0-9a-zA-Z]+', '_', ob.data.name)
-            # Find all associated armatures and add to list
-            if ob.type == "MESH":
-                for mod in ob.modifiers:
-                    if mod.type == 'ARMATURE':
-                        if mod.object is not None:
-                            mod.object.select_set(True)
+            else:
+                ob["hpl3export_obj_name"] = re.sub('[^0-9a-zA-Z]+', '_', ob.name)
+                ob["hpl3export_is_active"] = "FALSE"
+                ob["hpl3export_mesh_name"] = re.sub('[^0-9a-zA-Z]+', '_', ob.data.name)
+                # Find all associated armatures and add to list
+                if ob.type == "MESH":
+                    for mod in ob.modifiers:
+                        if mod.type == 'ARMATURE':
+                            if mod.object is not None:
+                                mod.object.select_set(True)
         self.active_object["hpl3export_is_active"] = "TRUE"
         bpy.ops.object.duplicate(mode='DUMMY')
         self.dupes = bpy.context.selected_objects[:]
@@ -1176,7 +1182,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                 dupes_to_export.append(
                     {
                         "name": dupe["hpl3export_mesh_name"],
-                        "subobjects": subobjects
+                        "subobjects": subobjects,
                     }
                 )
         
@@ -1193,8 +1199,8 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                 }
             ]
         for obj in temp_objects:
-            if obj not in self.dupes:
-                self.dupes.append(obj)
+            if obj[0] not in self.dupes:
+                self.dupes.append(obj[0])
         
         # Export mesh(es)
         for dupe_dict in dupes_to_export:
@@ -1204,9 +1210,9 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                 ent_exists = os.path.exists(self.export_path + dupe_dict["name"] + "/" + dupe_dict["name"] + ".ent")
                 ent_error = 0
                 if ent_exists:
-                    ent_error = self.update_ent(dupe_dict["name"], polycounts)
+                    ent_error = self.update_ent(dupe_dict, polycounts)
                 if not ent_exists or ent_error:
-                    self.generate_ent(dupe_dict["name"], polycounts, dupe_dict["subobjects"][0])
+                    self.generate_ent(dupe_dict, polycounts)
                     
     # ------------------------------------------------------------------------
     #    Make sure skinned meshes are parented to armature
@@ -1261,7 +1267,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         is_single_mat = (self.main_tool.bake_multi_mat_into_single == 'OP2')
         is_multiexport = (self.main_tool.multi_mode == "MULTI")
         is_rigged = (parent_armature != None)
-
+        
         if not is_rigged:
             # Apply modifiers
             depsgraph = bpy.context.evaluated_depsgraph_get()
@@ -1284,17 +1290,9 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         bpy.ops.object.parent_clear(type='CLEAR_KEEP_TRANSFORM')
         if is_rigged:
             bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
-
-        # Wacky transform
-        local_rot_x = mathutils.Matrix.Rotation(math.radians(-90.0), 4, 'X')
-        local_rot_z = mathutils.Matrix.Rotation(math.radians(180.0), 4, 'Z')
-        world_mat = dupe.matrix_world
-        world_rot_y = mathutils.Matrix.Identity(4)
-        if is_rigged:
-            world_mat = parent_armature.matrix_world
-            world_rot_y = mathutils.Matrix.Rotation(math.radians(-90.0), 4, 'Y')
-        column_reorder = mathutils.Matrix(((0,1,0,0), (0,0,1,0), (1,0,0,0), (0,0,0,1)))
-        dupe.matrix_world = world_rot_y @ column_reorder @ world_mat @ local_rot_x @ local_rot_z
+            
+        original_mat = dupe.matrix_world.copy()
+        dupe.matrix_world = self.convert_matrix(dupe.matrix_world, parent_armature)
 
         if is_single_mat:
             # Get first material
@@ -1314,7 +1312,25 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         else:
             # Separate by material
             bpy.ops.mesh.separate(type='MATERIAL')
-        return bpy.context.selected_objects[:]
+            
+        subobjects = []
+        for object in bpy.context.selected_objects:
+            subobjects.append((object, original_mat, parent_armature))
+        return subobjects
+    
+   
+    def convert_matrix(self, matrix, parent_armature = None):
+        # Wacky transform
+        local_rot_x = mathutils.Matrix.Rotation(math.radians(-90.0), 4, 'X')
+        local_rot_z = mathutils.Matrix.Rotation(math.radians(180.0), 4, 'Z')
+        world_mat = matrix.copy()
+        world_rot_y = mathutils.Matrix.Identity(4)
+        if parent_armature is not None:
+            world_mat = parent_armature.matrix_world.copy()
+            world_rot_y = mathutils.Matrix.Rotation(math.radians(-90.0), 4, 'Y')
+        column_reorder = mathutils.Matrix(((0,1,0,0), (0,0,1,0), (1,0,0,0), (0,0,0,1)))
+        result_mat = world_rot_y @ column_reorder @ world_mat @ local_rot_x @ local_rot_z
+        return result_mat
 
 
     # ------------------------------------------------------------------------
@@ -1326,10 +1342,10 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         for ob in bpy.context.selected_objects:
             ob.select_set(False)
         for subobject in dupe_dict["subobjects"]:
-            if subobject.type == "MESH":
-                subobject.select_set(True)
+            if subobject[0].type == "MESH":
+                subobject[0].select_set(True)
                 # Select associated armature
-                for mod in subobject.modifiers:
+                for mod in subobject[0].modifiers:
                     if mod.type == 'ARMATURE':
                         if mod.object is not None:
                             mod.object.select_set(True)
@@ -1342,13 +1358,18 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         for subobject in dupe_dict["subobjects"]:
             # Triangulate and get face count
             bm = bmesh.new()
-            bm.from_mesh(subobject.data)
+            bm.from_mesh(subobject[0].data)
             bmesh.ops.triangulate(bm, faces=bm.faces[:], quad_method='BEAUTY', ngon_method='BEAUTY')
-            bm.to_mesh(subobject.data)
+            bm.to_mesh(subobject[0].data)
             bm.free()
             polycounts.append({
-                "name": subobject.data.name, 
-                "count": str(len(subobject.data.polygons))
+                "object": subobject[0], 
+                "count": str(len(subobject[0].data.polygons)),
+                "WorldPos": "{:.5f}".format(subobject[0].location[0]) + " " + "{:.5f}".format(subobject[0].location[1]) + " " + "{:.5f}".format(subobject[0].location[2]),
+                "Rotation": "{:.5f}".format(subobject[0].rotation_euler[0]) + " " + "{:.5f}".format(subobject[0].rotation_euler[1]) + " " + "{:.5f}".format(subobject[0].rotation_euler[2]),
+                "Scale": "{:.5f}".format(subobject[0].scale[0]) + " " + "{:.5f}".format(subobject[0].scale[1]) + " " + "{:.5f}".format(subobject[0].scale[2]),
+                "original_mat" : subobject[1],
+                "parent_armature" : subobject[2]
             })
         # Export to DAE
         bpy.ops.wm.collada_export(
@@ -1440,12 +1461,12 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
     #        destination_ent_no_ext = path without ".ent"
     #       current_obj
     # ------------------------------------------------------------------------
-    def update_ent(self, entity_name, polycounts):
+    def update_ent(self, dupe_dict, polycounts):
     
         print(".ent exists, updating")
         
-        ent_path = self.export_path + entity_name + "/" + entity_name + ".ent"
-        short_path = re.sub(r'.*\/SOMA\/', '', self.export_path + entity_name + "/" + entity_name + ".dae")
+        ent_path = self.export_path + dupe_dict["name"] + "/" + dupe_dict["name"] + ".ent"
+        short_path = re.sub(r'.*\/SOMA\/', '', self.export_path + dupe_dict["name"] + "/" + dupe_dict["name"] + ".dae")
         try:
             ent_root = ET.parse(ent_path).getroot()
         except IOError:
@@ -1459,18 +1480,25 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             mesh.clear()
             mesh.attrib["Filename"] = short_path
             index = 0
-            for submesh_count in polycounts:
-                submesh = ET.SubElement(mesh, "SubMesh")
+            for entry in polycounts:
+                object = entry["object"]
+                submesh = None
+                for submesh_entry in mesh:
+                    if submesh_entry.get("Name") == object.name:
+                        submesh = submesh_entry
+                if submesh is None:
+                    submesh = ET.SubElement(mesh, "SubMesh")
                 submesh.attrib["ID"] = str(index)
-                index += 1
-                submesh.attrib["Name"] = submesh_count["name"]
+                submesh.attrib["ID"] = str(index)
+                submesh.attrib["Name"] = object.name
                 submesh.attrib["CreStamp"] = "0"
                 submesh.attrib["ModStamp"] = "0"
-                submesh.attrib["WorldPos"] = "0 0 0"
-                submesh.attrib["Rotation"] = "0 0 0"
-                submesh.attrib["Scale"] = "1 1 1"
-                submesh.attrib["TriCount"] = str(submesh_count["count"])
+                submesh.attrib["WorldPos"] = entry["WorldPos"]
+                submesh.attrib["Rotation"] = entry["Rotation"]
+                submesh.attrib["Scale"] = entry["Scale"]
+                submesh.attrib["TriCount"] = str(entry["count"])
                 submesh.attrib["Material"] = ""
+                index += 1
             ET.ElementTree(ent_root).write(ent_path)
         else:
             return 1
@@ -1479,50 +1507,115 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
 
     # ------------------------------------------------------------------------
     #    create new HPL3 .ent file
-    #        polycounts = (mesh_name, triangle_count)
+    #        polycounts = dict with tri count and other info
     #        destination_ent_no_ext = path without ".ent"
     #       current_obj
     # ------------------------------------------------------------------------
-    def generate_ent(self, entity_name, polycounts, first_subobj):
+    def generate_ent(self, dupe_dict, polycounts):
         print("no .ent exists. Creating")
         # Check object for an armature modifier
         is_rigged = False
-        for mod in first_subobj.modifiers:
-            if mod.type == 'ARMATURE':
-                if mod.object is not None:
-                    is_rigged = True
-                    break
+        for entry in polycounts:
+            for mod in entry["object"].modifiers:
+                if mod.type == 'ARMATURE':
+                    if mod.object is not None:
+                        is_rigged = True
+                        break
         
         print("Exporting .ent")
-        ent_path = self.export_path + entity_name + "/" + entity_name + ".ent"
+        ent_path = self.export_path + dupe_dict["name"] + "/" + dupe_dict["name"] + ".ent"
         
         ent_root = ET.Element("Entity")
         model_data = ET.SubElement(ent_root, "ModelData")
         entities = ET.SubElement(model_data, "Entities")
         mesh = ET.SubElement(model_data, "Mesh")
-        short_path = re.sub(r'.*\/SOMA\/', '', self.export_path + entity_name + "/" + entity_name + ".dae")
+        short_path = re.sub(r'.*\/SOMA\/', '', self.export_path + dupe_dict["name"] + "/" + dupe_dict["name"] + ".dae")
         mesh.attrib["Filename"] = short_path
+        shapes = ET.SubElement(model_data, "Shapes")
+        bodies = ET.SubElement(model_data, "Bodies")
         index = 0
-        for submesh_count in polycounts:
+        for entry in polycounts:
+            object = entry["object"]
             submesh = ET.SubElement(mesh, "SubMesh")
             submesh.attrib["ID"] = str(index)
-            index += 1
-            submesh.attrib["Name"] = submesh_count["name"]
+            submesh.attrib["Name"] = object.name
             submesh.attrib["CreStamp"] = "0"
             submesh.attrib["ModStamp"] = "0"
-            submesh.attrib["WorldPos"] = "0 0 0"
-            submesh.attrib["Rotation"] = "0 0 0"
-            submesh.attrib["Scale"] = "1 1 1"
-            submesh.attrib["TriCount"] = str(submesh_count["count"])
+            submesh.attrib["WorldPos"] = entry["WorldPos"]
+            submesh.attrib["Rotation"] = entry["Rotation"]
+            submesh.attrib["Scale"] = entry["Scale"]
+            submesh.attrib["TriCount"] = str(entry["count"])
             submesh.attrib["Material"] = ""
+            if self.main_tool.add_bodies:
+                # Get object name, bound box, and transforms
+                
+                # Create Shape
+                shape_index = len(polycounts) + (index * 2)
+                shape = ET.SubElement(shapes, "Shape")
+                shape.attrib["ID"] = str(shape_index)
+                shape.attrib["Name"] = "shape_" + object.name
+                shape.attrib["CreStamp"] = "0"
+                shape.attrib["ModStamp"] = "0"
+                shape.attrib["Rotation"] = entry["Rotation"]
+                # Get bounding box dimensions
+                box_scale = (
+                    (object.bound_box[4][0] - object.bound_box[0][0]),
+                    (object.bound_box[3][1] - object.bound_box[0][1]),
+                    (object.bound_box[1][2] - object.bound_box[0][2])
+                )
+                box_scale_mat = mathutils.Matrix.Identity(4)
+                box_scale_mat[0][0] = box_scale[0]
+                box_scale_mat[1][1] = box_scale[1]
+                box_scale_mat[2][2] = box_scale[2]
+
+                box_offset = (
+                    object.bound_box[0][0] + (box_scale[0] * 0.5),
+                    object.bound_box[0][1] + (box_scale[1] * 0.5),
+                    object.bound_box[0][2] + (box_scale[2] * 0.5)
+                )
+                
+                box_mat = entry["original_mat"] @ mathutils.Matrix.Translation(box_offset) @ box_scale_mat
+                final_mat = self.convert_matrix(box_mat, entry["parent_armature"])
+                loc, rot, scale = final_mat.decompose()
+                
+                box_scale_str = "{:.5f}".format(scale[0]) + " " + "{:.5f}".format(scale[1]) + " " + "{:.5f}".format(scale[2])
+                box_offset_str = "{:.5f}".format(loc[0]) + " " + "{:.5f}".format(loc[1]) + " " + "{:.5f}".format(loc[2])
+                #shape.attrib["WorldPos"] = entry["WorldPos"]
+                shape.attrib["WorldPos"] = box_offset_str
+                shape.attrib["Scale"] = box_scale_str
+                shape.attrib["RelativeTranslation"] = box_offset_str
+                shape.attrib["RelativeRotation"] = entry["Rotation"]
+                shape.attrib["RelativeScale"] = "1 1 1"
+                shape.attrib["ShapeType"] = "Box"
+                
+                # Create body
+                body_index = len(polycounts) + (index * 2) + 1
+                body = ET.SubElement(bodies, "Body")
+                body.attrib["ID"] = str(body_index)
+                body.attrib["Name"] = "body_" + object.name
+                body.attrib["CreStamp"] = "0"
+                body.attrib["ModStamp"] = "0"
+                body.attrib["WorldPos"] = entry["WorldPos"]
+                body.attrib["Rotation"] = "0 0 0"
+                body.attrib["Scale"] = "1 1 1"
+                body.attrib["Material"] = "Wood"
+                body.attrib["Mass"] = "1"
+                # Other attributes here
+                
+                children = ET.SubElement(body, "Children")
+                child = ET.SubElement(children, "Child")
+                child.attrib["ID"] = str(index)
+                shape_assoc = ET.SubElement(body, "Shape")
+                shape_assoc.attrib["ID"] = str(shape_index)
+            
+            index += 1
         bones = ET.SubElement(model_data, "Bones")
         # Add a dummy bone to cause model viewer to re-associate
         if is_rigged:
             dummy_bone = ET.SubElement(bones, "Bone")
             dummy_bone.attrib["ID"] = "1"
             dummy_bone.attrib["Name"] = "dummy"
-        shapes = ET.SubElement(model_data, "Shapes")
-        bodies = ET.SubElement(model_data, "Bodies")
+            
         joints = ET.SubElement(model_data, "Joints")
         animations = ET.SubElement(model_data, "Animations")
         proc_animations = ET.SubElement(model_data, "ProcAnimations")
@@ -1685,7 +1778,8 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         # Delete dupes
         data_to_delete = []
         for obj in self.dupes: # Change to self.subobjects
-            data_to_delete.append(obj.data)
+            if obj.data is not None:
+                data_to_delete.append(obj.data)
             bpy.data.objects.remove(obj, do_unlink=True)
         for data in data_to_delete:
             if type(data) == bpy.types.Mesh:
@@ -1696,9 +1790,12 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                 bpy.data.armatures.remove(data)
         # Restore selection and delete custom properties
         for obj in self.selected:
-            del obj["hpl3export_obj_name"]
-            del obj["hpl3export_mesh_name"]
-            del obj["hpl3export_is_active"]
+            try:
+                del obj["hpl3export_obj_name"]
+                del obj["hpl3export_mesh_name"]
+                del obj["hpl3export_is_active"]
+            except KeyError:
+                print("Could not delete all keys for '", obj.name, "'")
             obj.select_set(True)
 
 
@@ -1796,7 +1893,10 @@ class OBJECT_PT_HPL3_Export (Panel):
         obj_type_row.prop( mytool, "entity_option", text="")
         obj_type_row.prop( mytool, "multi_mode", expand=True)
         if mytool.multi_mode == "SINGLE":
-            active_name_san = re.sub('[^0-9a-zA-Z]+', '_', bpy.context.active_object.data.name)
+            if bpy.context.active_object.data is not None:
+                active_name_san = re.sub('[^0-9a-zA-Z]+', '_', bpy.context.active_object.data.name)
+            else:
+                active_name_san = re.sub('[^0-9a-zA-Z]+', '_', bpy.context.active_object.name)
             layout.label(text="Export name: " + active_name_san + ".dae")
         
         layout.prop( mytool, "map_file_path")
@@ -1826,6 +1926,8 @@ class OBJECT_PT_HPL3_Export (Panel):
                 map_export_col.prop( mytool, "is_occluder" )
             map_export_col.prop( mytool, "distance_culling" )
             map_export_col.prop( mytool, "culled_by_fog" )
+            if mytool.entity_option == 'OP2':
+                map_export_col.prop( mytool, "add_bodies" )
             map_export_col.enabled = obj_type_row.enabled
             
             bake_row_1 = col.row(align=True)
