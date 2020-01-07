@@ -155,7 +155,7 @@ class HPL3_Export_Properties (PropertyGroup):
         description="For objects with multiple materials, bake materials as",
         items=[ ('OP1', "One Texture Set Per Material", "Exported object will have multiple diffuse, specular, and normal maps (Allows each material's faces to use full UV space)"),
                 ('OP2', "Single Texture Set", "Exported object will have one diffuse, specular, and normal map (Unwraps and packs all UVs into a single UV space)"),
-                ('OP3', "None (.dae export only)", "Export only the .dae file, converted to Y-up for HPL3. NOTE: Object materials must have an image plugged into a principled node base color, otherwise .dae will not load")
+                ('OP3', "None (Use existing material)", "TO USE: Locate the material's primary (diffuse) .dds file, and drag-and-drop into the Shader Editor. Then connect the node to 'Base Color' of material's Principled BSDF node to associate the mesh with the image, otherwise mesh will not load")
                ]
         )
         
