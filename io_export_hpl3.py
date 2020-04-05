@@ -1,11 +1,11 @@
-# modified for blender 2.80 
+# modified for blender 2.80
 
 
 bl_info = {
     "name": "HPL3 Export",
     "description": "Export objects and materials directly into an HPL3 map",
     "author": "cadely",
-    "version": (2, 1, 0),
+    "version": (2, 1, 1),
     "blender": (2, 80, 0),
     "location": "3D View > Tools",
     "warning": "", # used for warning icon and text in addons panel
@@ -37,9 +37,9 @@ from bpy.types import (Panel,
 # ------------------------------------------------------------------------
 
 class HPL3_Export_Properties (PropertyGroup):
-    
+
     show_advanced : BoolProperty(default = False)
-    
+
     ## Static object and entity properties
     casts_shadows : BoolProperty(name="Casts Shadows", default = True)
     collides : BoolProperty(name="Collides", default = True)
@@ -51,12 +51,12 @@ class HPL3_Export_Properties (PropertyGroup):
         description="Create a cube body around each subobject which matches the dimensions of the object's bounding box",
         default = False
     )
-    
+
     def update_map_path(self, context):
         if self["map_file_path"] != "":
             no_double_slash = re.sub(r'\\\\|//', '', self["map_file_path"])
             self["map_file_path"] = os.path.abspath(no_double_slash)
-    
+
     map_file_path : StringProperty(
         name="Map File",
         description="Set to destination map's main .hpm file. Leave blank to skip map export",
@@ -65,7 +65,7 @@ class HPL3_Export_Properties (PropertyGroup):
         subtype='FILE_PATH',
         update=update_map_path
         )
-    
+
     def update_entity_path(self, context):
         no_double_slash = re.sub(r'\\\\|//', '', self["entity_export_path"])
         self["entity_export_path"] = os.path.abspath(no_double_slash)
@@ -91,23 +91,23 @@ class HPL3_Export_Properties (PropertyGroup):
         subtype='DIR_PATH',
         update=update_statobj_path
         )
-        
+
     bake_scene_lighting : BoolProperty(
         name="Bake Scene Lighting (SLOW)",
         description="Use Cycles to bake direct and indirect lighting to the diffuse texture (only use for single-use stationary objects). Set samples using Render > Sampling > Render Samples to control quality/time",
         default = False
         )
-        
+
     def update_square(self, context):
       self["map_res_y"] = self["map_res_x"]
-        
+
     square_resolution : BoolProperty(
         name="Square",
         description="Export a square image",
         default = True,
         update=update_square
         )
-    
+
     def update_res_x_pow2(self, context):
         base_2 = round(math.log(self["map_res_x"],2))
         base_2 = max(min(base_2, 14), 0)
@@ -115,7 +115,7 @@ class HPL3_Export_Properties (PropertyGroup):
         self["map_res_x"] = result
         if self.square_resolution:
           self["map_res_y"] = result
-    
+
     def update_res_y_pow2(self, context):
         base_2 = round(math.log(self["map_res_y"],2))
         base_2 = max(min(base_2, 14), 0)
@@ -123,7 +123,7 @@ class HPL3_Export_Properties (PropertyGroup):
         self["map_res_y"] = result
         if self["square_resolution"]:
           self["map_res_x"] = result
-  
+
     map_res_x : IntProperty(
         name = "X",
         description="A integer property",
@@ -133,7 +133,7 @@ class HPL3_Export_Properties (PropertyGroup):
         max = 8192,
         update=update_res_x_pow2
         )
-        
+
     map_res_y : IntProperty(
         name = "Y",
         description="A integer property",
@@ -143,7 +143,7 @@ class HPL3_Export_Properties (PropertyGroup):
         max = 8192,
         update=update_res_y_pow2
         )
-    
+
     sync_blender_deletions : BoolProperty(
         name="Clean Up Missing Objects (Read Description)",
         description="If objects previously exported with this tool exist in the HPL3 map but not the current Blender scene, delete them from the map and disk. Note: Will erase .dds and .dae files even if they have been modified since the last export (.ent and .mat will be left). Protect your work with Git/other version control!",
@@ -158,7 +158,7 @@ class HPL3_Export_Properties (PropertyGroup):
                 ('OP3', "None (Use existing material)", "TO USE: Locate the material's primary (diffuse) .dds file, and drag-and-drop into the Shader Editor. Then connect the node to 'Base Color' of material's Principled BSDF node to associate the mesh with the image, otherwise mesh will not load")
                ]
         )
-        
+
     entity_option : EnumProperty(
         name="Set objects up as",
         description="Type of object to be added to the HPL3 map",
@@ -166,7 +166,7 @@ class HPL3_Export_Properties (PropertyGroup):
                 ('OP2', "Entities", "Use for interactable objects and high-poly static items")
                ]
         )
-        
+
     multi_mode: EnumProperty(
             items=(('MULTI', "Multi Export", "Export each selected object as its own HPL3 map item"),
                    ('SINGLE', "Single Export", "Export all selected objects as a single HPL3 map item. Active object will be used as the 3D origin and name."),
@@ -181,7 +181,7 @@ class HPL3_Export_Properties (PropertyGroup):
 class OBJECT_OT_HPL3_Export (bpy.types.Operator):
     bl_idname = "wm.export_selected"
     bl_label = "Export Selected"
-    
+
     root = None
     asset_xml = None
     current_DAE = None
@@ -194,7 +194,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
     requested_dds_paths = None
     temp_images = []
     temp_materials = []
-    
+
 
     # ------------------------------------------------------------------------
     #    get NVIDIA DDS converter executable
@@ -207,13 +207,13 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                 npath = '"' + tpath + '"'
                 return npath
         return None
-    
+
     # ------------------------------------------------------------------------
     #    loop through scene objects and export
     # ------------------------------------------------------------------------
     def export_objects(self, mytool):
         error = 0
-        
+
         # Initialize global vars
         self.main_tool          = mytool
         self.selected           = bpy.context.selected_objects[:]
@@ -226,10 +226,10 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                 self.report({'WARNING'}, "No objects selected. Cleaning up unused files")
             else:
                 self.report({'WARNING'}, "No objects selected.")
-        
+
         exported_mesh_names = []
         export_num = 0
-        
+
         # Save original naming and create duplicates
         for ob in self.selected:
             if ob.type != "MESH" and ob.type != "ARMATURE":
@@ -247,14 +247,19 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         self.active_object["hpl3export_is_active"] = "TRUE"
         bpy.ops.object.duplicate(mode='DUMMY')
         self.dupes = bpy.context.selected_objects[:]
-        
+
         success = False
         # New export for each object
         if mytool.multi_mode == 'MULTI':
             for current in self.dupes:
                 if current.type == 'MESH':
                     export_num += 1
-                    
+
+                    # Deselect all and select object
+                    for ob in bpy.context.selected_objects:
+                        ob.select_set(False)
+                    current.select_set(True)
+
                     self.get_asset_xml_entry(current)
                     # Prevent re-exporting files for instanced objects
                     if current.data.name not in exported_mesh_names:
@@ -273,7 +278,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                     if mytool.map_file_path != "":
                         self.add_object(mytool, current)
             if mytool.map_file_path != "" and mytool.sync_blender_deletions:
-                error += self.sync_blender_deletions(mytool) 
+                error += self.sync_blender_deletions(mytool)
             success = True
 
         # Multiple objects, one export
@@ -292,7 +297,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             self.get_asset_xml_entry(self.active_object)
             if mytool.map_file_path != "":
                 self.add_object(mytool, self.active_object)
-                
+
             # Add DDS paths to asset tracking XML
             if "DDSpath" not in self.current_DAE.attrib:
                 self.current_DAE.attrib["DDSpath"] = ""
@@ -300,25 +305,25 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             for entry in self.requested_dds_paths:
                 self.current_DAE.attrib["DDSpath"] += entry + ";"
             success = True
-        
+
         bpy.context.window_manager.progress_end()
-        
+
         if success:
             self.prepare_and_export()
         self.clean_up()
-            
+
         # Restore object selection
         for obj_sel in self.selected:
             obj_sel.select_set(True)
         bpy.context.view_layer.objects.active = self.active_object
-        
-        
+
+
         msg = "Exported " + str(export_num) + " object(s)."
         self.report({'INFO'}, "%s" % (msg))
-            
+
         return error
-    
-    
+
+
     # ------------------------------------------------------------------------
     #    add object to HPL3 map
     #        current_obj - blender object being exported
@@ -328,7 +333,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             is_ent = True
         else:
             is_ent = False
-        
+
         # Get 'Blender@HPL3EXPORT' section of XML
         section = None
         for child in self.root:
@@ -346,9 +351,9 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             objects = ET.SubElement(section, "Objects")
         else:
             objects = section.find("Objects")
-        
+
         #BEGIN getting variables
-        
+
         # Assemble .dae/ent path
         if is_ent:
             filepath = self.mesh_export_path + "/" + current_obj["hpl3export_mesh_name"] + "/" + current_obj["hpl3export_mesh_name"] + ".ent"
@@ -356,7 +361,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             filepath = self.mesh_export_path + "/" + current_obj["hpl3export_mesh_name"] + "/" + current_obj["hpl3export_mesh_name"] + ".dae"
         filepath = re.sub(r'\\', '/', os.path.normpath(filepath))
         short_path = re.sub(r'.*\/SOMA\/', '', filepath)
-            
+
         # Find in file index list
         file_indices = section[0]
         existing_index = None
@@ -366,9 +371,9 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             if short_path == current_idx.get("Path"):
                 existing_index = current_idx.get("Id")
                 break
-            
+
         #self.get_asset_xml_entry(short_path)
-        
+
         # If not in index, make new index and object entry
         if existing_index is None:
             print("Adding new index entry")
@@ -384,13 +389,13 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             # Increment NumOfFiles
             num_of_files = int(file_indices.attrib['NumOfFiles'])
             file_indices.attrib['NumOfFiles'] = str(num_of_files + 1)
-            
+
             # Increment file use number in asset tracking
             if self.main_tool.multi_mode == "MULTI":
                 self.current_DAE.attrib["Uses"] = str(int(self.current_DAE.attrib["Uses"]) + 1)
-            
 
-        
+
+
         # Get last StaticObject ID, set to a num in case no entries exist
         try:
             lastID = int(objects[-1].get("ID")) + 1
@@ -399,7 +404,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                 lastID = 268435459
             else:
                 lastID = 285212672
-            
+
         # Get object name
         obj_name = current_obj["hpl3export_obj_name"]
 
@@ -412,14 +417,14 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                     is_rigged = True
                     armature = mod.object
                     break
-        
+
         # Get world transforms, convert to Y-up
         # If it's rigged, get skeleton transforms instead
         if is_rigged:
             world_mat = armature.matrix_world
         else:
             world_mat = current_obj.matrix_world
-        
+
         # Reorder vector columns such that Blender X = HPL Z, Blender Y = HPL X, Blender Z = HPL Y
         column_reorder = mathutils.Matrix(((0,1,0,0), (0,0,1,0), (1,0,0,0), (0,0,0,1)))
         y_up_mat = mathutils.Matrix(((0,-1,0,0), (1,0,0,0), (0,0,1,0), (0,0,0,1)))
@@ -427,13 +432,13 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         new_mat = column_reorder @ world_mat @ local_rot_y @ y_up_mat
         loc, rot, scale = new_mat.decompose()
         rot = rot.to_euler()
-        
+
         loc_str = "{:.5f}".format(loc[0]) + " " + "{:.5f}".format(loc[1]) + " " + "{:.5f}".format(loc[2])
         rot_str = "{:.5f}".format(rot[0]) + " " + "{:.5f}".format(rot[1]) + " " + "{:.5f}".format(rot[2])
         scale_str = "{:.5f}".format(scale[0])+ " " + "{:.5f}".format(scale[1]) + " " + "{:.5f}".format(scale[2])
-        
+
         #END getting variables
-        
+
         # Search for existing entry
         old_mod_time = 0
         created_new = 0
@@ -448,7 +453,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                 old_mod_time = int(obj.get("ModStamp"))
                 newobj = obj
                 break
-            
+
         # If does not exist, make new
         if newobj is None:
             # Create new XML element
@@ -456,8 +461,8 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             newobj.attrib["ID"] = str(lastID)
             newobj.attrib["CreStamp"] = str(int(time.time()))
             created_new = 1
-            
-        
+
+
         newobj.attrib["Name"] = obj_name
         newobj.attrib["ModStamp"] = str(int(time.time()))
         newobj.attrib["WorldPos"] = loc_str
@@ -492,7 +497,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         newobj.attrib["IllumColor"] = "1 1 1 1"
         newobj.attrib["IllumBrightness"] = "1"
         newobj.attrib["UID"] = "blender"
-        
+
         if is_ent:
             user_variables = newobj.find("UserVariables")
             if user_variables is None:
@@ -509,12 +514,12 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                 var.attrib["Value"] = "true"
             else:
                 var.attrib["Value"] = "false"
-        
+
         if created_new:
             objects.append(newobj)
 
         return old_mod_time
-    
+
     # ------------------------------------------------------------------------
     #    find (or create) an entry in the script's asset tracking xml file
     #        short_path - path to file with ".../SOMA/" removed
@@ -535,8 +540,8 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         # If asset not listed, save asset path to asset tracking xml list
             self.current_DAE = ET.SubElement(self.asset_xml, "Asset")
             self.current_DAE.attrib["DAEpath"] = short_path
-            self.current_DAE.attrib["Uses"] = "0"  
-    
+            self.current_DAE.attrib["Uses"] = "0"
+
     # ------------------------------------------------------------------------
     #    bake maps for every material in object, then create .ent and .mat files
     #    and export
@@ -547,17 +552,17 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         wm = bpy.context.window_manager
         wm.progress_begin(0, 100)
         progress = 0
-        
+
         error = 0
-    
+
         orig_materials = []
         temp_materials = []
-            
+
         materials_used = False
         object_has_nmaps = False
-            
+
         export_name = current_obj["hpl3export_mesh_name"]
-        
+
         # Prepare UV maps for bake
         uv_layers = current_obj.data.uv_layers
         old_uv = None
@@ -578,7 +583,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         elif len(uv_layers) is 0:
             # Make a new UV layer
             new_uv = uv_layers.new()
-        
+
         # Prepare materials and slots
         bpy.context.view_layer.objects.active = current_obj
         if len(current_obj.material_slots) is 0:
@@ -595,7 +600,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                 orig_materials.append((idx, orig_mat))
                 principled_name = None
                 mat = None
-                if orig_mat.node_tree is not None: 
+                if orig_mat.node_tree is not None:
                     for node in orig_mat.node_tree.nodes:
                         if (node.type == 'BSDF_PRINCIPLED'):
                             principled_name = node.name
@@ -622,7 +627,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                                     mat.node_tree.links.new(uv_node.outputs["UV"], node.inputs["Vector"])
                 temp_materials.append(mat)
                 slot.material = mat
-        
+
 
         if not materials_used:
             # new mat in slot 0
@@ -630,7 +635,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             mat.use_nodes = True
             temp_materials.append(mat)
             current_obj.material_slots[0].material = mat
-            
+
         # Deselect all and select object
         for ob in bpy.context.selected_objects:
             ob.select_set(False)
@@ -641,7 +646,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             render_samples = bpy.context.scene.eevee.taa_render_samples
         else:
             render_samples = bpy.context.scene.cycles.samples
-        
+
         # bake type, suffix, is_exportable, is_bakeable, socket_name, special_bake_type
         maps = (
         ('ROUGHNESS', '_rough',   False, True,  'Roughness', ''),
@@ -650,11 +655,11 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         ('NORMAL',    '_nrm',     True,  True,  'Normal', ''),
         ('DIFFUSE',   '',         True,  True,  'Base Color', '')
         )
-        
+
         images_to_export = []
 
         for map in maps:
-            
+
             if map[0] == 'NORMAL' and not object_has_nmaps:
                 continue
             if mytool.bake_multi_mat_into_single == 'OP2':
@@ -669,10 +674,10 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                         destination_dds = self.export_path + self.active_object["hpl3export_mesh_name"] + "/" + export_name + map[1] + ".dds"
                     # image datablock, export path, type, material name
                     images_to_export.append((bake_image, destination_dds, map[0], export_name))
-            
+
             # Loop through materials doing PRE-BAKE operations
             temp_bake_nodes = []
-            
+
             for mat in temp_materials:
                 matname_clean = re.sub('[^0-9a-zA-Z]+', '_', mat.name)
                 if mytool.multi_mode == "MULTI":
@@ -708,14 +713,14 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                 self.do_special_map_operation(mytool, map[0], False, node_setup, targa_name)
                 # Mark for later deletion
                 self.temp_materials.append(mat)
-            
+
             if map[3]: # If map is bakeable
                 if map[5] is not "":
                     bake_type = map[5]
                 else:
                     bake_type = map[0]
                 self.setup_bake(mytool, bake_type, render_samples)
-                
+
                 try:
                     if mytool.bake_multi_mat_into_single == 'OP2':
                         bpy.ops.object.bake(type=bake_type, use_split_materials=False)
@@ -726,14 +731,14 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                     self.report({'ERROR'}, "%s" % (error_msg))
                     error += 1
                     break
-            
+
             # Loop through materials doing POST-BAKE operations
             for node_setup in temp_bake_nodes:
                 self.do_special_map_operation(mytool, map[0], True, node_setup, "")
-             
+
             progress += 10
             wm.progress_update(progress)
-        
+
         if not error:
             for image in images_to_export:
                 # export
@@ -753,20 +758,20 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                 # Delete extra slots
                 for i in range(0, len(uv_layers)-1):
                     uv_layers.remove(uv_layers[0])
-                    
+
 
             # generate .mat files
             self.generate_mat(mytool, images_to_export)
-        
+
         bpy.context.scene.render.engine = render_engine
         bpy.context.scene.cycles.samples = render_samples
-            
+
         return error
-    
+
     # ------------------------------------------------------------------------
     #    traverse socket-connected images to find optimal baking resolution
     #        socket - socket belonging to the material's Principled BSDF node
-    # ------------------------------------------------------------------------    
+    # ------------------------------------------------------------------------
     def get_optimal_image_size(self, mytool, socket):
         if not socket.is_linked:
             return 4, 4
@@ -793,7 +798,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             max_res_x = int(math.pow(2, base_2))
             # Limit to max bake size x
             max_res_x = min(max_res_x, mytool.map_res_x)
-            
+
             base_2 = round(math.log(max_res_y,2))
             base_2 = max(min(base_2, 14), 0)
             max_res_y = int(math.pow(2, base_2))
@@ -802,8 +807,8 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         else:
             max_res_x = mytool.map_res_x
             max_res_y = mytool.map_res_y
-        return max_res_x, max_res_y    
-    
+        return max_res_x, max_res_y
+
     # ------------------------------------------------------------------------
     #    for each map type, set up nodes for baking
     #        bake_type    - map type, e.g. "DIFFUSE"
@@ -816,7 +821,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         if bake_type == 'ROUGHNESS' and post_bake:
             # rename node
             node_setup[1].label = 'HPL3_ROUGHNESS'
-            
+
     ##Pre-specular
         elif bake_type == 'PRESPEC':
             spec_socket = node_setup[2].inputs["Specular"]
@@ -863,8 +868,8 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                     node_setup[0].links.new(node.outputs[0], diff_socket)
                 # rename node
                 node_setup[1].label = 'HPL3_SPEC'
-                
-    ##Specular    
+
+    ##Specular
         elif bake_type == 'SPECULAR' and not post_bake:
             # Find rough and spec images in node tree
             rough = None
@@ -874,11 +879,11 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                     rough = node.image
                 elif (node.label == 'HPL3_SPEC'):
                     spec = node.image
-                
+
             if node_setup[1].image.source == 'FILE':
                 return # Skip whole function to avoid re-rendering
-            
-            
+
+
             # save then set renderer settings
             render_engine = bpy.context.scene.render.engine
             render_x = bpy.context.scene.render.resolution_x
@@ -891,7 +896,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             render_use_compositing = bpy.context.scene.render.use_compositing
             render_samples = bpy.context.scene.cycles.samples
 
-            
+
         ## Combine spec and roughness nodes
             using_nodes = bpy.context.scene.use_nodes
             bpy.context.scene.use_nodes = True
@@ -904,7 +909,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                 # Mute existing render layers
                 if (type(node) == bpy.types.CompositorNodeRLayers):
                     node.mute = True
-            
+
             comp = []
             # add composite output
             comp.append(comp_tree.nodes.new("CompositorNodeComposite"))
@@ -955,8 +960,8 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                 comp.append(comp_tree.nodes.new("CompositorNodeImage"))
                 comp[9].image = rough
             comp_tree.links.new(comp[9].outputs[0], comp[8].inputs[0])
-            
-            
+
+
             max_res_x = max(spec.size[0], rough.size[0])
             max_res_y = max(spec.size[1], rough.size[1])
             if max_res_x is not 0 and max_res_y is not 0:
@@ -969,7 +974,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             else:
                 max_res_x = mytool.map_res_x
                 max_res_y = mytool.map_res_y
-                
+
             bpy.context.scene.render.resolution_x = max_res_x
             bpy.context.scene.render.resolution_y = max_res_y
             bpy.context.scene.render.resolution_percentage = 100
@@ -978,26 +983,26 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             else:
                 bpy.context.scene.render.display_mode = 'NONE'
             bpy.context.scene.render.use_compositing = True
-            
-            
-            
+
+
+
             bpy.ops.render.render()
-            
+
             for img in bpy.context.blend_data.images:
                 if (img.type == 'RENDER_RESULT'):
                     hpl3_spec = img
-                    
+
             scene_disp_device = bpy.context.scene.display_settings.display_device
             bpy.context.scene.display_settings.display_device = "None"
-            
+
             hpl3_spec.save_render(targa_export + "_spec.tga")
-            
+
             bpy.context.scene.display_settings.display_device = scene_disp_device
             #set above spec Image to FILE, set to path of newly exported image
             node_setup[1].image.source = 'FILE'
             node_setup[1].image.filepath = (targa_export + "_spec.tga")
-            
-            
+
+
             # Restore
             # Delete all in 'comp'
             for node in comp:
@@ -1012,9 +1017,9 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             # Delete now-unused images
             bpy.context.blend_data.images.remove(rough)
             bpy.context.blend_data.images.remove(spec)
-            
-            
-            
+
+
+
             # revert to old renderer options
             bpy.context.scene.use_nodes = using_nodes
             bpy.context.scene.render.engine = render_engine
@@ -1027,7 +1032,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                 bpy.context.scene.render.display_mode = render_disp_mode
             bpy.context.scene.render.use_compositing = render_use_compositing
             bpy.context.scene.cycles.samples = render_samples
-            
+
 
     ##Normal
         elif bake_type == 'NORMAL' and not post_bake:
@@ -1062,7 +1067,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         elif bake_type == 'DIFFUSE' and post_bake: # Connect node to principled node
             # attach new image node to Base Color in principled shader
             node_setup[0].links.new(node_setup[1].outputs[0], node_setup[2].inputs[0])
-    
+
     # ------------------------------------------------------------------------
     #    setup blender bake options for each map type
     # ------------------------------------------------------------------------
@@ -1096,7 +1101,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         bake.margin = 16
         bake.use_clear = True
         bake.use_selected_to_active = False
-            
+
     # ------------------------------------------------------------------------
     #    export image and convert to DDS
     #        image               - list (image datablock, export path, type)
@@ -1130,7 +1135,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         try:
             if (image[0].source == 'FILE') and (os.path.exists(dds_file)):
                     os.remove(dds_file)
-            error = os.system('"'+self.CONVERTERPATH+params+" "+input2+" "+output2+'"')  
+            error = os.system('"'+self.CONVERTERPATH+params+" "+input2+" "+output2+'"')
         except PermissionError:
             message = "Permission denied removing " + dds_file
             print(message)
@@ -1142,7 +1147,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             message = "Failed to write " + dds_file
             print(message)
             #self.report({'WARNING'}, "%s" % (message))
-        
+
         return error
 
 
@@ -1155,21 +1160,21 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
     # ------------------------------------------------------------------------
     def prepare_and_export(self):
         print("export here")
-        
+
         dupes_to_export = []
-        
+
         # Prepare object parents
         for dupe in self.dupes:
             self.prepare_parent(dupe)
-        
+
         # Prepare armatures
         for dupe in self.dupes:
             if dupe.type == "ARMATURE":
                 self.prepare_armature(dupe)
-        
+
         # Update once to use newly-transformed bone matrices
         bpy.context.view_layer.update()
-        
+
         # Prepare meshes
         for dupe in self.dupes:
             parent_armature = None
@@ -1185,7 +1190,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                         "subobjects": subobjects,
                     }
                 )
-        
+
         # Flatten all dupes_to_export into one list
         temp_objects = []
         for dupe in dupes_to_export:
@@ -1201,7 +1206,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         for obj in temp_objects:
             if obj[0] not in self.dupes:
                 self.dupes.append(obj[0])
-        
+
         # Export mesh(es)
         for dupe_dict in dupes_to_export:
             polycounts = self.export_mesh(dupe_dict)
@@ -1213,7 +1218,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                     ent_error = self.update_ent(dupe_dict, polycounts)
                 if not ent_exists or ent_error:
                     self.generate_ent(dupe_dict, polycounts)
-                    
+
     # ------------------------------------------------------------------------
     #    Make sure skinned meshes are parented to armature
     # ------------------------------------------------------------------------
@@ -1234,13 +1239,13 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                 parent_armature.select_set(True)
                 bpy.context.view_layer.objects.active = parent_armature
                 bpy.ops.object.parent_set()
-                                      
+
     # ------------------------------------------------------------------------
     #    Prepare armatures for export
     # ------------------------------------------------------------------------
     def prepare_armature(self, dupe):
         is_multiexport = (self.main_tool.multi_mode == "MULTI")
-        
+
         # Use transforms of active's armature if it has one
         armature_of_activeobj = None
         if self.active_object.type == "MESH":
@@ -1252,14 +1257,14 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             active_mat = armature_of_activeobj.matrix_world
         else:
             active_mat = self.active_object.matrix_world
-            
+
         # prepare_armature
         active_offset = active_mat.inverted_safe() @ dupe.matrix_world
         if is_multiexport:
             active_offset = mathutils.Matrix.Identity(4)
         # Rotate 90 Z
         dupe.matrix_world = mathutils.Matrix(((0,-1,0,0), (1,0,0,0), (0,0,1,0), (0,0,0,1))) @ active_offset
-                
+
     # ------------------------------------------------------------------------
     #    Prepare meshes for export
     # ------------------------------------------------------------------------
@@ -1267,13 +1272,13 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         is_single_mat = (self.main_tool.bake_multi_mat_into_single == 'OP2')
         is_multiexport = (self.main_tool.multi_mode == "MULTI")
         is_rigged = (parent_armature != None)
-        
+
         if not is_rigged:
             # Apply modifiers
             depsgraph = bpy.context.evaluated_depsgraph_get()
             mod_mesh = bpy.data.meshes.new_from_object(dupe.evaluated_get(depsgraph), preserve_all_data_layers=True, depsgraph=depsgraph)
             dupe.data = mod_mesh
-                    
+
         if is_rigged:
             # Multiply cube by armature inverse mat (which has not yet been updated by blender)
             dupe.matrix_world = parent_armature.matrix_world.inverted_safe() @ dupe.matrix_world
@@ -1290,7 +1295,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         bpy.ops.object.parent_clear(type='CLEAR_KEEP_TRANSFORM')
         if is_rigged:
             bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
-            
+
         original_mat = dupe.matrix_world.copy()
         dupe.matrix_world = self.convert_matrix(dupe.matrix_world, parent_armature)
 
@@ -1312,13 +1317,13 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         else:
             # Separate by material
             bpy.ops.mesh.separate(type='MATERIAL')
-            
+
         subobjects = []
         for object in bpy.context.selected_objects:
             subobjects.append((object, original_mat, parent_armature))
         return subobjects
-    
-   
+
+
     def convert_matrix(self, matrix, parent_armature = None):
         # Wacky transform
         local_rot_x = mathutils.Matrix.Rotation(math.radians(-90.0), 4, 'X')
@@ -1352,7 +1357,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         # Sanitize name and build filepath
         san_name = re.sub('[^0-9a-zA-Z]+', '_', dupe_dict["name"])
         filepath = self.mesh_export_path + "/" + san_name + "/" + san_name + ".dae"
-                            
+
         # Get polycounts
         polycounts = []
         for subobject in dupe_dict["subobjects"]:
@@ -1363,7 +1368,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             bm.to_mesh(subobject[0].data)
             bm.free()
             polycounts.append({
-                "object": subobject[0], 
+                "object": subobject[0],
                 "count": str(len(subobject[0].data.polygons)),
                 "WorldPos": "{:.5f}".format(subobject[0].location[0]) + " " + "{:.5f}".format(subobject[0].location[1]) + " " + "{:.5f}".format(subobject[0].location[2]),
                 "Rotation": "{:.5f}".format(subobject[0].rotation_euler[0]) + " " + "{:.5f}".format(subobject[0].rotation_euler[1]) + " " + "{:.5f}".format(subobject[0].rotation_euler[2]),
@@ -1373,14 +1378,14 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             })
         # Export to DAE
         bpy.ops.wm.collada_export(
-            filepath=filepath, 
-            apply_modifiers=False, 
-            selected=True, 
-            include_children=True, 
+            filepath=filepath,
+            apply_modifiers=False,
+            selected=True,
+            include_children=True,
             include_armatures=True,
             active_uv_only=True,
             use_texture_copies=False,
-            triangulate=False, 
+            triangulate=False,
             use_object_instantiation=True,
             use_blender_profile=False,
             limit_precision=True
@@ -1390,19 +1395,19 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
 
 
 
-        
+
     # ------------------------------------------------------------------------
     #    generate HPL3 .mat file
     #        images_to_export - (image datablock, export path, type, material_name)
     # ------------------------------------------------------------------------
     def generate_mat(self, mytool, images_to_export):
-        
+
         # Regroup images by material
         mat_names = []
         for image in images_to_export:
             if image[2] == "DIFFUSE":
                 mat_names.append(image[3])
-        
+
         materials = []
         index = 0
         for name in mat_names:
@@ -1411,24 +1416,24 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                 if image[3] == name:
                     materials[index].append(image)
             index += 1
-                    
-        
-        
+
+
+
         for mat in materials:
             print("Exporting .mat")
-            
+
             diffuse = None
             for image in mat:
                 if image[2] == "DIFFUSE":
                     diffuse = image
-            
+
             if diffuse is not None:
                 path_no_ext = os.path.splitext(diffuse[1])[0]
                 output = path_no_ext + ".mat"
                 if os.path.exists(output):
                     print("\t.mat already exists")
                     pass
-                
+
             mat_root = ET.Element("Material")
             main = ET.SubElement(mat_root, "Main")
             main.attrib["DepthTest"] = "True"
@@ -1462,9 +1467,9 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
     #       current_obj
     # ------------------------------------------------------------------------
     def update_ent(self, dupe_dict, polycounts):
-    
+
         print(".ent exists, updating")
-        
+
         ent_path = self.export_path + dupe_dict["name"] + "/" + dupe_dict["name"] + ".ent"
         short_path = re.sub(r'.*\/SOMA\/', '', self.export_path + dupe_dict["name"] + "/" + dupe_dict["name"] + ".dae")
         try:
@@ -1521,10 +1526,10 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                     if mod.object is not None:
                         is_rigged = True
                         break
-        
+
         print("Exporting .ent")
         ent_path = self.export_path + dupe_dict["name"] + "/" + dupe_dict["name"] + ".ent"
-        
+
         ent_root = ET.Element("Entity")
         model_data = ET.SubElement(ent_root, "ModelData")
         entities = ET.SubElement(model_data, "Entities")
@@ -1548,7 +1553,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             submesh.attrib["Material"] = ""
             if self.main_tool.add_bodies:
                 # Get object name, bound box, and transforms
-                
+
                 # Create Shape
                 shape_index = len(polycounts) + (index * 2)
                 shape = ET.SubElement(shapes, "Shape")
@@ -1573,11 +1578,11 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                     object.bound_box[0][1] + (box_scale[1] * 0.5),
                     object.bound_box[0][2] + (box_scale[2] * 0.5)
                 )
-                
+
                 box_mat = entry["original_mat"] @ mathutils.Matrix.Translation(box_offset) @ box_scale_mat
                 final_mat = self.convert_matrix(box_mat, entry["parent_armature"])
                 loc, rot, scale = final_mat.decompose()
-                
+
                 box_scale_str = "{:.5f}".format(scale[0]) + " " + "{:.5f}".format(scale[1]) + " " + "{:.5f}".format(scale[2])
                 box_offset_str = "{:.5f}".format(loc[0]) + " " + "{:.5f}".format(loc[1]) + " " + "{:.5f}".format(loc[2])
                 #shape.attrib["WorldPos"] = entry["WorldPos"]
@@ -1587,7 +1592,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                 shape.attrib["RelativeRotation"] = entry["Rotation"]
                 shape.attrib["RelativeScale"] = "1 1 1"
                 shape.attrib["ShapeType"] = "Box"
-                
+
                 # Create body
                 body_index = len(polycounts) + (index * 2) + 1
                 body = ET.SubElement(bodies, "Body")
@@ -1601,13 +1606,13 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                 body.attrib["Material"] = "Wood"
                 body.attrib["Mass"] = "1"
                 # Other attributes here
-                
+
                 children = ET.SubElement(body, "Children")
                 child = ET.SubElement(children, "Child")
                 child.attrib["ID"] = str(index)
                 shape_assoc = ET.SubElement(body, "Shape")
                 shape_assoc.attrib["ID"] = str(shape_index)
-            
+
             index += 1
         bones = ET.SubElement(model_data, "Bones")
         # Add a dummy bone to cause model viewer to re-associate
@@ -1615,7 +1620,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             dummy_bone = ET.SubElement(bones, "Bone")
             dummy_bone.attrib["ID"] = "1"
             dummy_bone.attrib["Name"] = "dummy"
-            
+
         joints = ET.SubElement(model_data, "Joints")
         animations = ET.SubElement(model_data, "Animations")
         proc_animations = ET.SubElement(model_data, "ProcAnimations")
@@ -1651,7 +1656,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                 except:
                     print("Warning: Could not delete '" + entry + "'.")
                     leftover_files.append(entry)
-        
+
         # Clean up old .mat files and folders (may cause running SOMA to crash)' and uncomment following:
         #try:
         #    leftover_dir = os.path.dirname(SOMA_path + shortname_list[0])
@@ -1660,7 +1665,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         #if not os.listdir(leftover_dir):
         #    os.rmdir(leftover_dir)
         #    print("Removed directory ", leftover_dir)
-        
+
         return leftover_files
 
     def delete_unused_dds(self):
@@ -1734,7 +1739,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                             entry2.attrib["FileIndex"] = str(int(entry2.attrib["FileIndex"]) - 1)
                     # Find asset in list and remove .dae and .dds
                     asset = None
-                    
+
                     if is_ent:
                         dae_path = re.sub(r'ent$', 'dae', dae_path)
                     for listing in self.asset_xml.iter("Asset"):
@@ -1747,10 +1752,10 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                             files_to_delete = asset.attrib["DDSpath"].split(";")
                             files_to_delete.append(asset.attrib["DAEpath"])
                             files_to_delete.append(re.sub(r'.dae', '.msh', asset.attrib["DAEpath"])) # Delete .msh
-                            
+
                             # Clean up old .mat files (may cause running SOMA to crash) and uncomment following:
                             #files_to_delete.append(re.sub(r'.dds', '.mat', files_to_delete[0])) # Delete .mat
-              
+
                             leftover_files = self.delete_assets(mytool, files_to_delete)
                             self.asset_xml.remove(asset)
                             if leftover_files:
@@ -1759,7 +1764,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                             asset.attrib["Uses"] = str(int(asset.attrib["Uses"]) - 1)
         for entry in entries_to_remove:
             objects.remove(entry) # Erase entry
-                
+
         return 0
 
     def clean_up(self):
@@ -1785,7 +1790,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             if type(data) == bpy.types.Mesh:
                 print("removing ", data.name)
                 bpy.data.meshes.remove(data)
-                
+
             else:
                 bpy.data.armatures.remove(data)
         # Restore selection and delete custom properties
@@ -1799,7 +1804,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             obj.select_set(True)
 
 
-    
+
     # ------------------------------------------------------------------------
     #    Addon operator, do initial checks and run script
     # ------------------------------------------------------------------------
@@ -1812,7 +1817,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             error_msg = 'Nvidia tools not found, please place nvidia folder in blender addons.'
             self.report({'ERROR'}, "%s" % (error_msg))
             return {'FINISHED'}
-        
+
         # Read map static objects/entity file
         if mytool.entity_option == 'OP2':
             map_file_path = mytool.map_file_path + "_Entity"
@@ -1835,25 +1840,25 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             self.mesh_export_path = mytool.statobj_export_path
         else:
             self.mesh_export_path = mytool.entity_export_path
-            
+
         if not os.path.exists(self.mesh_export_path):
             error_msg = 'Asset Folder does not exist'
             self.report({'ERROR'}, "%s" % (error_msg))
             return {'FINISHED'}
-        
+
         # Read blender asset use list xml
         asset_xml_path = self.mesh_export_path + "/exportscript_asset_tracking.xml"
-        
+
         try:
             self.asset_xml= ET.parse(asset_xml_path).getroot()
         except (IOError, ParseError):
             print("No asset use list found. Creating new")
             self.asset_xml = ET.Element("ExportedFiles")
-        
+
         print("File read success")
-        
+
         error = self.export_objects(mytool)
-        
+
         #DEBUG
         #ET.dump(asset_xml)
         # END DEBUG
@@ -1873,9 +1878,9 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
 class OBJECT_PT_HPL3_Export (Panel):
     bl_idname = "OBJECT_PT_HPL3_Export"
     bl_label = "HPL3 Export"
-    bl_space_type = "VIEW_3D"   
+    bl_space_type = "VIEW_3D"
     bl_region_type = "TOOLS"
-    bl_context = "objectmode"   
+    bl_context = "objectmode"
 
 
     @classmethod
@@ -1887,7 +1892,7 @@ class OBJECT_PT_HPL3_Export (Panel):
         scene = context.scene
         mytool = scene.my_tool
 
-        layout.label(text=str(len(bpy.context.selected_objects)) + " Object(s) Selected for Export")   
+        layout.label(text=str(len(bpy.context.selected_objects)) + " Object(s) Selected for Export")
         layout.label(text="Duplicate with ALT+D to share a mesh", icon="ERROR")
         obj_type_row = layout.row(align=True)
         obj_type_row.prop( mytool, "entity_option", text="")
@@ -1898,7 +1903,7 @@ class OBJECT_PT_HPL3_Export (Panel):
             else:
                 active_name_san = re.sub('[^0-9a-zA-Z]+', '_', bpy.context.active_object.name)
             layout.label(text="Export name: " + active_name_san + ".dae")
-        
+
         layout.prop( mytool, "map_file_path")
         if mytool.entity_option == 'OP1':
             layout.prop( mytool, "statobj_export_path")
@@ -1929,15 +1934,15 @@ class OBJECT_PT_HPL3_Export (Panel):
             if mytool.entity_option == 'OP2':
                 map_export_col.prop( mytool, "add_bodies" )
             map_export_col.enabled = obj_type_row.enabled
-            
+
             bake_row_1 = col.row(align=True)
             bake_row_2 = col.row(align=True)
             bake_row_3 = col.row(align=True)
             option_row_4 = col.row(align=True)
-            
+
             multi_mat = mytool.bake_multi_mat_into_single == 'OP1'
             single_mat = mytool.bake_multi_mat_into_single == 'OP2'
-            
+
             if single_mat:
                 bake_row_1.label(text="Bake Size:")
             else:
@@ -1947,7 +1952,7 @@ class OBJECT_PT_HPL3_Export (Panel):
             bake_row_2.prop( mytool, "map_res_y" )
             bake_row_3.prop( mytool, "bake_scene_lighting")
             option_row_4.prop( mytool, "sync_blender_deletions")
-            
+
             if single_mat or multi_mat:
                 bake_row_1.enabled = True
                 bake_row_2.enabled = True
@@ -1958,7 +1963,7 @@ class OBJECT_PT_HPL3_Export (Panel):
                 bake_row_3.enabled = True
             else:
                 bake_row_3.enabled = False
-            
+
             option_row_4.enabled = obj_type_row.enabled
             if mytool.multi_mode != "MULTI":
                 option_row_4.enabled = False
@@ -1974,8 +1979,8 @@ class OBJECT_PT_HPL3_Export (Panel):
 # ------------------------------------------------------------------------
 
 def register():
-    
-    
+
+
     bpy.utils.register_class( HPL3_Export_Properties )
     bpy.types.Scene.my_tool = PointerProperty( type = HPL3_Export_Properties )
     #
@@ -1992,5 +1997,5 @@ def unregister():
 
 
 if __name__ == "__main__":
-    
+
     register()
