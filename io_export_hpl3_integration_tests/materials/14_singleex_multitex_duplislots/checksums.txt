@@ -1,0 +1,18 @@
+
+Cube.dae=fdbfeaa5c9e548a8d7b8a64834c92252 *-
+hpl3export_default.dds=4a831e2e9c151c69319c466e019f97c7 *-
+hpl3export_default.mat=f8216e96fc48ecf1fb0c95ef8d5d5148 *-
+hpl3export_default_spec.dds=ef42f2060757d9c9fd5b4449cf73aeaf *-
+Material.dds=7064fc35a2bc62a28b89adf98766c19a *-
+Material.mat=f6724c7a9edc9dd80cc76c37e1c9fc72 *-
+Material_001.dds=1a3c9ce0872e29a46c79fb2448e8f074 *-
+Material_001.mat=437530a0fe18fc8f77551de1d5be4358 *-
+Material_001_spec.dds=ef42f2060757d9c9fd5b4449cf73aeaf *-
+Material_002.dds=1ea74febd0317b73f3a020f8f5c8a0af *-
+Material_002.mat=940f5b50d102c4af707455c715a1bc01 *-
+Material_002_spec.dds=ef42f2060757d9c9fd5b4449cf73aeaf *-
+Material_003.dds=3b0b10b714e82776278f7d0707088693 *-
+Material_003.mat=f1d5fe9b474f284c2fd2b3d9b17d2a2a *-
+Material_003_spec.dds=ef42f2060757d9c9fd5b4449cf73aeaf *-
+Material_spec.dds=a4a9e77a25186ffab92dfb23a48f21a4 *-
+exportscript_asset_tracking.xml=22eaa473346ef18382036f618fef3d48 *-

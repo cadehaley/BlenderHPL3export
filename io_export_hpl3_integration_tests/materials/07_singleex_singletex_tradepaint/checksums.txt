@@ -1,0 +1,9 @@
+
+Cube.dae=4d8ac336678591dc7fd8d639575adc4d *-
+Cube.dds=91078d38c75f478c4d2d981e649bdbb1 *-
+Cube.mat=4ebf8c143f1da3bad7b0a9ac5943e519 *-
+Cube_spec.dds=efef007f5a0e9c93cc0358d89907c366 *-
+Suzanne.dds=ec4cff0560737468e14912a99022cdb2 *-
+Suzanne.mat=5376ba512ec29852398e9c2577664f57 *-
+Suzanne_spec.dds=c4d19ec94cfdf839fd291902393b94aa *-
+exportscript_asset_tracking.xml=bcf27052b56b73de163254cbb5134088 *-

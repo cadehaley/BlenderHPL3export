@@ -1,0 +1,10 @@
+
+Cube.dae=fbb2bc281f55c23e06cd6c1c40aae6b0 *-
+Cube.dds=c9366a6c35588231c9e6c1810b0076d5 *-
+Cube.mat=c95fdf5d4b3e35f3ffe64b44e5e4ebb8 *-
+Cube_spec.dds=efef007f5a0e9c93cc0358d89907c366 *-
+exportscript_asset_tracking.xml=7e328120f684869d3147cc5f7429c4e9 *-
+Suzanne.dae=d84c62384b4f67538b82f22b71c223c6 *-
+Suzanne.dds=dfa86e33e629bc7f23f665355f40dead *-
+Suzanne.mat=120dd8de7e37440add973a96290086c2 *-
+Suzanne_spec.dds=40922f5645c328c79d19bd5664445cf1 *-

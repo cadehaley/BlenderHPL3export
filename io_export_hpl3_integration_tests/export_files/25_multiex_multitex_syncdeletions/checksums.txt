@@ -1,0 +1,12 @@
+
+exportscript_asset_tracking.xml=5601b3fb3dd9fa9ab994e32761e24759 *-
+map.hpm=35686977777ad443944506e623bf262a *-
+map.hpm_Entity=de49dc42506ea5e125b2985edf03a17c *-
+cube.mat=5f5410b7a450e15c0b2f079336876453 *-
+thingtodelete.ent=4771f7cf58e1c34e65ece5442ddef6f9 *-
+monkey.dds=1a3c9ce0872e29a46c79fb2448e8f074 *-
+monkey.mat=98bd49eac42c2971946d58962793c484 *-
+monkey_spec.dds=ef42f2060757d9c9fd5b4449cf73aeaf *-
+thingtokeep.dae=96074b57f12bf60286b0ea87ff1fe7f7 *-
+thingtokeep.ent=a94410acf054fbc673ac2b90f4d1b745 *-
+thingtokeep.msh=fc69e50dc7ba691c28ac449e2acc960f *-

@@ -1,0 +1,7 @@
+
+axis.dae=cbab461ffc23929fcda650ef71334ea4 *-
+axis.ent=6b4b39ac17c6ac707480ef1a46f3a20b *-
+Material.dds=fb8c7b8cd7e6ec7c9d8be4344d1019f2 *-
+Material.mat=3ce1ed4a0fa6513ac85a69891e79d034 *-
+Material_spec.dds=a4a9e77a25186ffab92dfb23a48f21a4 *-
+exportscript_asset_tracking.xml=3a730bd9113537c34899900a0c9fdaa6 *-

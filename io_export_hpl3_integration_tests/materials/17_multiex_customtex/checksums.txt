@@ -1,0 +1,7 @@
+
+existing.dae=8976dd6c5e6f4f57a013ac4fd1e98407 *-
+monkey.dds=ff1fee27f6171e7aff554ee5cac456c2 *-
+monkey.mat=dc336c0fdba00c29c8926d1e137adbd7 *-
+monkey_nrm.dds=71b0f07646819cd7da900c662f7bf394 *-
+monkey_spec.dds=9f05c98b955c28a39337d1d9168a49cf *-
+exportscript_asset_tracking.xml=86e77680d4060120c882a148f7845600 *-
