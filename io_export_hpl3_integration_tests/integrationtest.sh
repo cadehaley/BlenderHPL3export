@@ -14,7 +14,7 @@ function runTest {
     RED='\033[0;31m'
     GREEN='\033[0;32m'
     TEST_BLEND_FILE=$1
-    TEST_PATH="$(dirname "$DIR/$TEST_BLEND_FILE")"
+    TEST_PATH="$(dirname "$(pwd)/$TEST_BLEND_FILE")"
     rm -r "$TEST_PATH/tmp"
     mkdir "$TEST_PATH/tmp"
     if [[ -d "$TEST_PATH/existing" ]]; then
