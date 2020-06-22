@@ -5,7 +5,7 @@ bl_info = {
     "name": "HPL3 Export",
     "description": "Export objects and materials directly into an HPL3 map",
     "author": "cadely",
-    "version": (3, 0, 0),
+    "version": (3, 0, 1),
     "blender": (2, 80, 0),
     "location": "3D View > Tools",
     "warning": "", # used for warning icon and text in addons panel
@@ -1240,10 +1240,11 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             wm.progress_update(progress)
         if hpl3export.bake_multi_mat_into_single == 'OP2':
             for obj in self.dupes:
-                # Delete extra slots
-                uv_layers = obj.data.uv_layers
-                for i in range(0, len(uv_layers)-1):
-                    uv_layers.remove(uv_layers[0])
+                if obj.type == 'MESH':
+                    # Delete extra slots
+                    uv_layers = obj.data.uv_layers
+                    for i in range(0, len(uv_layers)-1):
+                        uv_layers.remove(uv_layers[0])
         else:
             for obj in self.dupes:
                 if "hpl3export_original_name" in obj.data:
