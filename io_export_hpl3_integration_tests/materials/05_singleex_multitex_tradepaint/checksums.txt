@@ -1,9 +1,0 @@
-
-Cube.dae=2aef8ff0850f86e15f8d9f39c1ed53a3 *-
-Material.dds=7064fc35a2bc62a28b89adf98766c19a *-
-Material.mat=4561f5b21d45985963173fdd57ed8422 *-
-Material_001.dds=1a3c9ce0872e29a46c79fb2448e8f074 *-
-Material_001.mat=d337dade254a2268269344b43e861c1b *-
-Material_001_spec.dds=ef42f2060757d9c9fd5b4449cf73aeaf *-
-Material_spec.dds=a4a9e77a25186ffab92dfb23a48f21a4 *-
-exportscript_asset_tracking.xml=a5d32cdba68ed2ba7eda236f61c5cf4b *-

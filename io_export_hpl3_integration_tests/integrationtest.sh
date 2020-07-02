@@ -204,7 +204,7 @@ TESTS["28_multiex_multitex_tinytexture"]="./materials/28_multiex_multitex_tinyte
 
 #===================================================
 # If second argument is a valid test name
-if [[ "$1" != "" ]]; then
+if [[ "$1" != "" ]] && [[ "$1" != "approve" ]]; then
     if [[ ${TESTS[$1]+_} ]]; then
         echo "-----"
         echo "Running test: $1"
@@ -219,13 +219,16 @@ if [[ "$1" != "" ]]; then
     fi
 else
     # Run all tests
+    if [[ "$1" == "approve" ]]; then
+        APPROVE="approve"
+    fi
     for T in "${!TESTS[@]}"; do
         echo "-----"
-        echo "Running test: $T"
+        echo "Running ALL tests. Current: $T"
         echo "-----"
         PREPFUNC=$($T)
         echo $PREPFUNC
-        runTest ${TESTS[$T]}
+        runTest ${TESTS[$T]} $APPROVE
     done
     NC='\033[0m' # No Color
     GREEN='\033[0;32m'
