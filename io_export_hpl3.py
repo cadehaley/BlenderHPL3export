@@ -5,7 +5,7 @@ bl_info = {
     "name": "HPL3 Export",
     "description": "Export objects and materials directly into an HPL3 map",
     "author": "cadely",
-    "version": (3, 0, 1),
+    "version": (3, 1, 0),
     "blender": (2, 80, 0),
     "location": "3D View > Tools",
     "warning": "", # used for warning icon and text in addons panel
@@ -1200,12 +1200,8 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         wm.progress_begin(0, 100)
         progress = 0
 
-        # Activate Cycles
-        render_engine = bpy.context.scene.render.engine
-        if render_engine == "BLENDER_EEVEE":
-            render_samples = bpy.context.scene.eevee.taa_render_samples
-        else:
-            render_samples = bpy.context.scene.cycles.samples
+        bake_settings = {}
+        self.save_restore_bake_settings("save", bake_settings)
         for mapname, map in self.maps.items():
             using_map = False
             for mapgroup in self.mapgroups:
@@ -1222,7 +1218,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                         mapgroup.special_bake(mapname)
             else:
                 bake_type = "DIFFUSE" if map.bake_using_diffuse else map.name
-                self.setup_bake(hpl3export, bake_type, render_samples)
+                self.setup_bake(hpl3export, bake_type, bake_settings["render_samples"])
                 self.bake(hpl3export, bake_type)
                 if not hpl3export.disable_small_texture_workaround:
                     self.bake_micromaps(hpl3export, mapname, bake_type)
@@ -1253,9 +1249,43 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                     original_mesh = bpy.data.meshes[obj.data["hpl3export_original_name"]]
                     obj.data = original_mesh
                     bpy.data.meshes.remove(bpy.data.meshes[temp_mesh_name])
-        bpy.context.scene.render.engine = render_engine
-        bpy.context.scene.cycles.samples = render_samples
+        self.save_restore_bake_settings("restore", bake_settings)
 
+    # ------------------------------------------------------------------------
+    #    Either save or restore settings used for baking
+    #    mode = "save", or "restore"
+    # ------------------------------------------------------------------------
+    def save_restore_bake_settings(self, mode, settings):
+        bake = bpy.context.scene.render.bake
+        attributes = "DIFFUSE:use_pass_direct DIFFUSE:use_pass_indirect DIFFUSE:use_pass_color " \
+        "NORMAL:normal_space NORMAL:normal_r NORMAL:normal_g NORMAL:normal_b " \
+        "ANY:margin ANY:use_clear ANY:use_selected_to_active".split(' ')
+
+        if mode is "save":
+            settings["bake_type"] = bpy.context.scene.cycles.bake_type
+            settings["render_engine"] = bpy.context.scene.render.engine
+            bpy.context.scene.render.engine = 'CYCLES'
+            if settings["render_engine"] == "BLENDER_EEVEE":
+                settings["render_samples"] = bpy.context.scene.eevee.taa_render_samples
+            else:
+                settings["render_samples"] = bpy.context.scene.cycles.samples
+
+            for attribute in attributes:
+                bake_type = attribute.split(':')[0]
+                attr_string = attribute.split(':')[1]
+                if bake_type != "ANY":
+                    bpy.context.scene.cycles.bake_type = bake_type
+                settings[attr_string] = getattr(bake, attr_string)
+        else:
+            for attribute in attributes:
+                bake_type = attribute.split(':')[0]
+                attr_string = attribute.split(':')[1]
+                if bake_type != "ANY":
+                    bpy.context.scene.cycles.bake_type = bake_type
+                setattr(bake, attr_string, settings[attr_string])
+            bpy.context.scene.cycles.bake_type = settings["bake_type"]
+            bpy.context.scene.render.engine = settings["render_engine"]
+            bpy.context.scene.cycles.samples = settings["render_samples"]
 
 
     # ------------------------------------------------------------------------
@@ -1285,8 +1315,8 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
 
         if bake_type is 'NORMAL':
             bake.normal_space = 'TANGENT'
-            bake.normal_r = 'POS_X'
-            bake.normal_g = 'POS_Y'
+            bake.normal_r = 'POS_Y'
+            bake.normal_g = 'POS_X'
             bake.normal_b = 'POS_Z'
         bake.margin = 16
         bake.use_clear = True
