@@ -7,7 +7,7 @@
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" > /dev/null 2>&1 && pwd)"
 cd $DIR
-BLENDER="/c/Program Files/Blender Foundation/Blender 2.83/blender.exe"
+BLENDER="/c/Program Files/Blender Foundation/Blender 2.90/blender.exe"
 
 function runTest {
     NC='\033[0m' # No Color
@@ -199,6 +199,11 @@ TESTS["27_multiex_singletex_noslots"]="./materials/27_multiex_singletex_noslots/
 
 # Use a very small texture with small texture fix disabled
 TESTS["28_multiex_multitex_tinytexture"]="./materials/28_multiex_multitex_tinytexture/28_multiex_multitex_tinytexture.blend"
+
+# Address bug when using multi materials and some don't have normals
+TESTS["29_multiex_multitex_normalbakebug"]="./materials/29_multiex_multitex_normalbakebug/29_multiex_multitex_normalbakebug.blend"
+
+
 
 
 
