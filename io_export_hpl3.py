@@ -5,7 +5,7 @@ bl_info = {
     "name": "HPL3 Export",
     "description": "Export objects and materials directly into an HPL3 map",
     "author": "cadely",
-    "version": (3, 1, 0),
+    "version": (3, 2, 0),
     "blender": (2, 80, 0),
     "location": "3D View > Tools",
     "warning": "", # used for warning icon and text in addons panel
@@ -324,8 +324,6 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             if hpl3export.bake_multi_mat_into_single != 'OP3':
                 self.delete_unused_textures(hpl3export)
             success = True
-
-        bpy.context.window_manager.progress_end()
 
         if success:
             self.prepare_and_export(hpl3export)
@@ -749,10 +747,10 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         principled_name = "Principled BSDF"
         # Copy base, spec, and roughness
         mat.node_tree.nodes[principled_name].inputs["Base Color"].default_value = (
-            orig_mat.diffuse_color[0], orig_mat.diffuse_color[1], orig_mat.diffuse_color[2], 1
+            original.diffuse_color[0], original.diffuse_color[1], original.diffuse_color[2], 1
         )
-        mat.node_tree.nodes[principled_name].inputs["Specular"].default_value = orig_mat.specular_intensity
-        mat.node_tree.nodes[principled_name].inputs["Roughness"].default_value = orig_mat.roughness
+        mat.node_tree.nodes[principled_name].inputs["Specular"].default_value = original.specular_intensity
+        mat.node_tree.nodes[principled_name].inputs["Roughness"].default_value = original.roughness
         return mat
 
 
@@ -830,9 +828,13 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                 using_nmap = True
         # Make maps
         for maptype, map in self.maps.items():
-            if maptype == "NORMAL" and not using_nmap:
-                continue
             mi = copy.deepcopy(map)
+            if maptype == "NORMAL" and not using_nmap:
+                # Skip if single export, otherwise make one and just don't export it
+                if hpl3export.bake_multi_mat_into_single == 'OP2':
+                    continue
+                else:
+                    mi.exportable = False
             res_x = res_y = 0
             socket_linked = False
             for metamat in mapgroup.metamats:
@@ -1196,10 +1198,6 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
     #    bake materials and export the results
     # ------------------------------------------------------------------------
     def bake_materials_and_save(self, hpl3export):
-        wm = bpy.context.window_manager
-        wm.progress_begin(0, 100)
-        progress = 0
-
         bake_settings = {}
         self.save_restore_bake_settings("save", bake_settings)
         for mapname, map in self.maps.items():
@@ -1232,8 +1230,6 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             self.export_textures(hpl3export, mapgroup)
             for mat_path in mapgroup.mat_paths:
                 self.generate_mat(hpl3export, mapgroup, mat_path)
-            progress += 10
-            wm.progress_update(progress)
         if hpl3export.bake_multi_mat_into_single == 'OP2':
             for obj in self.dupes:
                 if obj.type == 'MESH':
@@ -1256,58 +1252,65 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
     #    mode = "save", or "restore"
     # ------------------------------------------------------------------------
     def save_restore_bake_settings(self, mode, settings):
-        bake = bpy.context.scene.render.bake
+        scene = bpy.context.scene
+        bake = scene.render.bake
         attributes = "DIFFUSE:use_pass_direct DIFFUSE:use_pass_indirect DIFFUSE:use_pass_color " \
         "NORMAL:normal_space NORMAL:normal_r NORMAL:normal_g NORMAL:normal_b " \
         "ANY:margin ANY:use_clear ANY:use_selected_to_active".split(' ')
 
         if mode is "save":
-            settings["bake_type"] = bpy.context.scene.cycles.bake_type
-            settings["render_engine"] = bpy.context.scene.render.engine
-            bpy.context.scene.render.engine = 'CYCLES'
+            settings["bake_type"] = scene.cycles.bake_type
+            settings["render_engine"] = scene.render.engine
+            settings["cm_exposure"] = scene.view_settings.exposure
+            settings["cm_gamma"] = scene.view_settings.gamma
+            scene.render.engine = 'CYCLES'
             if settings["render_engine"] == "BLENDER_EEVEE":
-                settings["render_samples"] = bpy.context.scene.eevee.taa_render_samples
+                settings["render_samples"] = scene.eevee.taa_render_samples
             else:
-                settings["render_samples"] = bpy.context.scene.cycles.samples
+                settings["render_samples"] = scene.cycles.samples
 
             for attribute in attributes:
                 bake_type = attribute.split(':')[0]
                 attr_string = attribute.split(':')[1]
                 if bake_type != "ANY":
-                    bpy.context.scene.cycles.bake_type = bake_type
+                    scene.cycles.bake_type = bake_type
                 settings[attr_string] = getattr(bake, attr_string)
         else:
             for attribute in attributes:
                 bake_type = attribute.split(':')[0]
                 attr_string = attribute.split(':')[1]
                 if bake_type != "ANY":
-                    bpy.context.scene.cycles.bake_type = bake_type
+                    scene.cycles.bake_type = bake_type
                 setattr(bake, attr_string, settings[attr_string])
-            bpy.context.scene.cycles.bake_type = settings["bake_type"]
-            bpy.context.scene.render.engine = settings["render_engine"]
-            bpy.context.scene.cycles.samples = settings["render_samples"]
-
+            scene.cycles.bake_type = settings["bake_type"]
+            scene.render.engine = settings["render_engine"]
+            scene.cycles.samples = settings["render_samples"]
+            scene.view_settings.exposure = settings["cm_exposure"]
+            scene.view_settings.gamma = settings["cm_gamma"]
 
     # ------------------------------------------------------------------------
     #    setup blender bake options for each map type
     # ------------------------------------------------------------------------
     def setup_bake(self, hpl3export, bake_type, render_samples):
         print("setting up bake")
-        bpy.context.scene.render.engine = 'CYCLES'
-        #bpy.context.scene.cycles.device = 'GPU'
+        scene = bpy.context.scene
+        scene.render.engine = 'CYCLES'
+        scene.cycles.device = 'GPU'
         # GPU baking errors in beta, use CPU for now
-        bpy.context.scene.cycles.device = 'CPU'
-        bpy.context.scene.cycles.samples = 4
-        bpy.context.scene.cycles.bake_type = bake_type
+        scene.cycles.device = 'CPU'
+        scene.cycles.samples = 4
+        scene.cycles.bake_type = bake_type
+        scene.view_settings.exposure = 0
+        scene.view_settings.gamma = 1
 
-        bake = bpy.context.scene.render.bake
+        bake = scene.render.bake
         if bake_type is 'DIFFUSE':
             # Disable direct and indirect, enable color pass
             # if bake_scene_lighting, enable all 3 and set samples higher
             if hpl3export.bake_scene_lighting:
                 bake.use_pass_direct = True
                 bake.use_pass_indirect = True
-                bpy.context.scene.cycles.samples = render_samples
+                scene.cycles.samples = render_samples
             else:
                 bake.use_pass_direct = False
                 bake.use_pass_indirect = False
@@ -2275,9 +2278,10 @@ class OBJECT_PT_HPL3_Export (Panel):
                 map_export_col.prop( hpl3export, "is_occluder" )
             map_export_col.prop( hpl3export, "distance_culling" )
             map_export_col.prop( hpl3export, "culled_by_fog" )
+            entity_col = col.column(align=True)
             if hpl3export.entity_option == 'OP2':
-                map_export_col.prop( hpl3export, "add_bodies" )
-            map_export_col.enabled = obj_type_row.enabled
+                entity_col.prop( hpl3export, "add_bodies" )
+            map_export_col.enabled = obj_type_row.enabled and hpl3export.map_file_path != ""
 
             bake_row_1 = col.row(align=True)
             bake_row_2 = col.row(align=True)
