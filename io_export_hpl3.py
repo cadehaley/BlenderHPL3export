@@ -5,7 +5,7 @@ bl_info = {
     "name": "HPL3 Export",
     "description": "Export objects and materials directly into an HPL3 map",
     "author": "cadely",
-    "version": (3, 2, 0),
+    "version": (3, 3, 0),
     "blender": (2, 80, 0),
     "location": "3D View > Tools",
     "warning": "", # used for warning icon and text in addons panel
@@ -669,7 +669,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         self.create_mapgroup_maps(hpl3export, mapgroup, self.get_export_dir(hpl3export, mesh_name), mesh_name)
         if len(current_obj.data.uv_layers) is 0:
             new_uv = uv_layers.new()
-            bpy.ops.uv.smart_project(angle_limit=85.0, island_margin = 0.02, use_aspect=False, stretch_to_bounds=False)
+            self.smart_project_uvs(current_obj)
         else:
             self.create_single_uv_map(current_obj)
         metamesh.create_mesh_with_reset_uvs()
@@ -723,7 +723,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                 mapgroup.metameshes.append(metamesh)
         if len(current_obj.data.uv_layers) is 0:
             new_uv = current_obj.data.uv_layers.new()
-            bpy.ops.uv.smart_project(angle_limit=85.0, island_margin = 0.02, use_aspect=False, stretch_to_bounds=False)
+            self.smart_project_uvs(current_obj)
         metamesh.create_mesh_with_reset_uvs()
         return
 
@@ -812,13 +812,23 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         if len(uv_layers) == 8:
             idx_to_remove = 7 if uv_layers.active_index != 7 else 6
             uv_layers.remove(uv_layers[idx_to_remove])
-        # create new called "hpl3uv", select, and unwrap w/o stretching to uv bounds
+        # create new called "hpl3uv", select, and unwrap w/o scaling to uv bounds
         new_uv = uv_layers.new(name="hpl3uv")
         new_uv.active = True
         new_uv.active_render = True
         # Requires object to be the only object selected
-        bpy.ops.uv.smart_project(angle_limit=85.0, island_margin = 0.02, use_aspect=False, stretch_to_bounds=False)
+        self.smart_project_uvs(current_obj)
         return
+
+    def smart_project_uvs(self, current_obj):
+        if bpy.app.version >= (2, 91, 0):
+            for poly in current_obj.data.polygons:
+                poly.select = True
+            bpy.ops.object.mode_set(mode='EDIT')
+            bpy.ops.uv.smart_project(angle_limit=math.radians(85.0), island_margin = 0.001, correct_aspect=False, scale_to_bounds=False)
+            bpy.ops.object.mode_set(mode='OBJECT')
+        else:
+            bpy.ops.uv.smart_project(angle_limit=85.0, island_margin = 0.02, use_aspect=False, stretch_to_bounds=False)
 
     def create_mapgroup_maps(self, hpl3export, mapgroup, export_dir, base_name):
         # Find if normal map is used
