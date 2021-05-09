@@ -5,7 +5,7 @@ bl_info = {
     "name": "HPL3 Export",
     "description": "Export objects and materials directly into an HPL3 map",
     "author": "cadely",
-    "version": (3, 3, 0),
+    "version": (3, 4, 0),
     "blender": (2, 80, 0),
     "location": "3D View > Tools",
     "warning": "", # used for warning icon and text in addons panel
@@ -1725,6 +1725,8 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             filepath=filepath,
             apply_modifiers=False,
             selected=True,
+            keep_keyframes=True,
+            keep_flat_curves=True,
             include_children=True,
             include_armatures=True,
             active_uv_only=True,
