@@ -277,7 +277,8 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         self.dupes = bpy.context.selected_objects[:]
         # Make the object's data real if it is linked
         for dupe in self.dupes:
-            self.make_data_copy(dupe.data)
+            if (dupe.data.library != None):
+                dupe.data.make_local()
 
         success = False
         # New export for each object
