@@ -5,7 +5,7 @@ bl_info = {
     "name": "HPL3 Export",
     "description": "Export objects and materials directly into an HPL3 map",
     "author": "cadely",
-    "version": (3, 4, 0),
+    "version": (3, 5, 0),
     "blender": (2, 80, 0),
     "location": "3D View > Tools",
     "warning": "", # used for warning icon and text in addons panel
@@ -220,6 +220,16 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         return None
 
     # ------------------------------------------------------------------------
+    #    make a copy of the data, unless it's linked. Then make it local
+    # ------------------------------------------------------------------------
+    def make_data_copy(self, data):
+        if (data.library != None):
+            return data.make_local()
+        else:
+            return data.copy()
+    # ------------------------------------------------------------------------
+
+    # ------------------------------------------------------------------------
     #    loop through scene objects and export
     # ------------------------------------------------------------------------
     def export_objects(self, hpl3export):
@@ -265,6 +275,9 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         self.active_object["hpl3export_is_active"] = "TRUE"
         bpy.ops.object.duplicate(mode='DUMMY')
         self.dupes = bpy.context.selected_objects[:]
+        # Make the object's data real if it is linked
+        for dupe in self.dupes:
+            self.make_data_copy(dupe.data)
 
         success = False
         # New export for each object
@@ -583,9 +596,15 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             self.object = object
             self.mesh_original = object.data
 
+        def make_data_copy(self, data):
+            if (data.library != None):
+                return data.make_local()
+            else:
+                return data.copy()
+
         def create_mesh_with_reset_uvs(self):
             current_mesh_name = self.object.data.name
-            new_mesh = self.object.data.copy()
+            new_mesh = self.make_data_copy(self.object.data)
             uv_layers = new_mesh.uv_layers
             old_uv_idx = -1
             uv_names = []
@@ -657,7 +676,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                     metamat.material = self.make_valid_material(slot.material, temp_mat_name)
                 else:
                     # Make a copy
-                    metamat.material = slot.material.copy()
+                    metamat.material = self.make_data_copy(slot.material)
                     metamat.material.name = temp_mat_name
                     self.connect_vector_inputs(current_obj, metamat.material)
                 metamat.principled_node = self.get_principled_node(metamat.material)
@@ -709,7 +728,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                     metamat.material = self.make_valid_material(slot.material, temp_mat_name)
                 else:
                     # Make a copy
-                    metamat.material = slot.material.copy()
+                    metamat.material = self.make_data_copy(slot.material)
                     metamat.material.name = temp_mat_name
                     #connect_vector_inputs(current_obj, metamat.material)
                 metamat.principled_node = self.get_principled_node(metamat.material)
