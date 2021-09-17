@@ -5,7 +5,7 @@ bl_info = {
     "name": "HPL3 Export",
     "description": "Export objects and materials directly into an HPL3 map",
     "author": "cadely",
-    "version": (3, 5, 0),
+    "version": (3, 6, 0),
     "blender": (2, 80, 0),
     "location": "3D View > Tools",
     "warning": "", # used for warning icon and text in addons panel
@@ -249,7 +249,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             "DIFFUSE": self.DiffuseMap()
         }
         # Check that objects were selected
-        if len(self.selected) is 0:
+        if len(self.selected) == 0:
             if hpl3export.sync_blender_deletions:
                 self.report({'WARNING'}, "No objects selected. Cleaning up unused files")
             else:
@@ -657,7 +657,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         if metamesh not in mapgroup.metameshes:
             mapgroup.metameshes.append(metamesh)
         mesh_name = current_obj["hpl3export_mesh_name"]
-        if len(current_obj.material_slots) is 0:
+        if len(current_obj.material_slots) == 0:
             bpy.ops.object.material_slot_add()
         for idx,slot in enumerate(current_obj.material_slots):
             if slot.material is None:
@@ -687,7 +687,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             slot.material = metamat.material
 
         self.create_mapgroup_maps(hpl3export, mapgroup, self.get_export_dir(hpl3export, mesh_name), mesh_name)
-        if len(current_obj.data.uv_layers) is 0:
+        if len(current_obj.data.uv_layers) == 0:
             new_uv = uv_layers.new()
             self.smart_project_uvs(current_obj)
         else:
@@ -741,7 +741,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             slot.material = metamat.material
             if metamesh not in mapgroup.metameshes:
                 mapgroup.metameshes.append(metamesh)
-        if len(current_obj.data.uv_layers) is 0:
+        if len(current_obj.data.uv_layers) == 0:
             new_uv = current_obj.data.uv_layers.new()
             self.smart_project_uvs(current_obj)
         metamesh.create_mesh_with_reset_uvs()
@@ -912,7 +912,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         # traverse socket subtree to find max res in image nodes
         subtree_nodes = [socket.links[0].from_node]
         node_list = []
-        while len(subtree_nodes) is not 0:
+        while len(subtree_nodes) != 0:
             for input in subtree_nodes[0].inputs:
                 if (input.is_linked):
                     # Will have duplicates but will include all in subtree
@@ -925,7 +925,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                 if(node.image is not None):
                     max_res_x = max(node.image.size[0], max_res_x)
                     max_res_y = max(node.image.size[1], max_res_y)
-        if max_res_x is not 0 and max_res_y is not 0:
+        if max_res_x != 0 and max_res_y != 0:
             base_2 = round(math.log(max_res_x,2))
             base_2 = max(min(base_2, 14), 0)
             max_res_x = int(math.pow(2, base_2))
@@ -1107,7 +1107,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             comp_tree.links.new(comp[9].outputs[0], comp[8].inputs[0])
             max_res_x = max(spec.size[0], rough.size[0])
             max_res_y = max(spec.size[1], rough.size[1])
-            if max_res_x is not 0 and max_res_y is not 0:
+            if max_res_x != 0 and max_res_y != 0:
                 base_2 = round(math.log(max_res_x,2))
                 base_2 = max(min(base_2, 14), 0)
                 max_res_x = int(math.pow(2, base_2))
@@ -1193,7 +1193,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                 # Change subnodes to non-color data
                 subtree_nodes = [normal_socket.links[0].from_node]
                 node_list = []
-                while len(subtree_nodes) is not 0:
+                while len(subtree_nodes) != 0:
                     for input in subtree_nodes[0].inputs:
                         if (input.is_linked):
                             # Will have duplicates but will include all in subtree
@@ -1288,7 +1288,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         "NORMAL:normal_space NORMAL:normal_r NORMAL:normal_g NORMAL:normal_b " \
         "ANY:margin ANY:use_clear ANY:use_selected_to_active".split(' ')
 
-        if mode is "save":
+        if mode == "save":
             settings["bake_type"] = scene.cycles.bake_type
             settings["render_engine"] = scene.render.engine
             settings["cm_exposure"] = scene.view_settings.exposure
@@ -1334,7 +1334,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         scene.view_settings.gamma = 1
 
         bake = scene.render.bake
-        if bake_type is 'DIFFUSE':
+        if bake_type == 'DIFFUSE':
             # Disable direct and indirect, enable color pass
             # if bake_scene_lighting, enable all 3 and set samples higher
             if hpl3export.bake_scene_lighting:
@@ -1346,7 +1346,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                 bake.use_pass_indirect = False
             bake.use_pass_color = True
 
-        if bake_type is 'NORMAL':
+        if bake_type == 'NORMAL':
             bake.normal_space = 'TANGENT'
             bake.normal_r = 'POS_Y'
             bake.normal_g = 'POS_X'
@@ -1413,7 +1413,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                     mapgroup.mat_paths.append(export_path)
                 tga_file = export_path + mi.suffix + ".tga"
                 dds_file = export_path + mi.suffix + ".dds"
-                if idx is 0:
+                if idx == 0:
                     initial_dds = dds_file
                     bpy.context.scene.render.image_settings.file_format = 'TARGA'
                     bpy.context.scene.render.image_settings.color_mode = 'RGBA'
@@ -1451,7 +1451,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                         print("REMOVING ", mi.temp_image)
                         os.remove(mi.temp_image)
                     # hook diffuse images up to exported file
-                    if key is "DIFFUSE":
+                    if key == "DIFFUSE":
                         mi.image.source = "FILE"
                         mi.image.filepath = dds_file
                 elif hpl3export.multi_mode == "MULTI":
@@ -1462,7 +1462,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                         copyfile(initial_dds, dds_file)
                     except IOError:
                         print("Error: Permission denied copying " + initial_dds + " to " + dds_file)
-                    if key is "DIFFUSE":
+                    if key == "DIFFUSE":
                         new_metaimages[metamesh.object.name] = self.set_up_diffuse_ref(mapgroup, dds_file, metamesh.object, mapgroup.metamats[0])
         # Add newly created metaimages
         for key, mi in new_metaimages.items():
