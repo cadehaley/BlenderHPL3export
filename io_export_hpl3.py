@@ -5,7 +5,7 @@ bl_info = {
     "name": "HPL3 Export",
     "description": "Export objects and materials directly into an HPL3 map",
     "author": "cadely",
-    "version": (3, 6, 0),
+    "version": (3, 7, 0),
     "blender": (2, 80, 0),
     "location": "3D View > Tools",
     "warning": "", # used for warning icon and text in addons panel
@@ -845,7 +845,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             for poly in current_obj.data.polygons:
                 poly.select = True
             bpy.ops.object.mode_set(mode='EDIT')
-            bpy.ops.uv.smart_project(angle_limit=math.radians(85.0), island_margin = 0.001, correct_aspect=False, scale_to_bounds=False)
+            bpy.ops.uv.smart_project(angle_limit=math.radians(70.0), island_margin = 0.002, correct_aspect=False, scale_to_bounds=False)
             bpy.ops.object.mode_set(mode='OBJECT')
         else:
             bpy.ops.uv.smart_project(angle_limit=85.0, island_margin = 0.02, use_aspect=False, stretch_to_bounds=False)
@@ -1326,9 +1326,9 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         scene = bpy.context.scene
         scene.render.engine = 'CYCLES'
         scene.cycles.device = 'GPU'
-        # GPU baking errors in beta, use CPU for now
-        scene.cycles.device = 'CPU'
-        scene.cycles.samples = 4
+        # # GPU baking errors in beta, use CPU for now
+        # scene.cycles.device = 'CPU'
+        scene.cycles.samples = 16
         scene.cycles.bake_type = bake_type
         scene.view_settings.exposure = 0
         scene.view_settings.gamma = 1
