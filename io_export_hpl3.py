@@ -1,11 +1,12 @@
-# modified for blender 2.80
+# Author: Cade Haley
+# This code is licensed under Creative Commons Attribution 4.0
 
 
 bl_info = {
     "name": "HPL3 Export",
     "description": "Export objects and materials directly into an HPL3 map",
     "author": "cadely",
-    "version": (3, 8, 0),
+    "version": (3, 9, 0),
     "blender": (2, 80, 0),
     "location": "3D View > Tools",
     "warning": "", # used for warning icon and text in addons panel
@@ -838,7 +839,6 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         # create new called "hpl3uv", select, and unwrap w/o scaling to uv bounds
         new_uv = uv_layers.new(name="hpl3uv")
         new_uv.active = True
-        new_uv.active_render = True
         # Requires object to be the only object selected
         self.smart_project_uvs(current_obj)
         return
