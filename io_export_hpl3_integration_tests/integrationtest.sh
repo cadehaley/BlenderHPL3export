@@ -8,6 +8,7 @@
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" > /dev/null 2>&1 && pwd)"
 cd $DIR
 BLENDER="/c/Program Files/Blender Foundation/Blender 2.93/blender.exe"
+#BLENDER="/d/Downloads/blender-3.2.1-windows-x64/blender-3.2.1-windows-x64/blender.exe"
 
 function runTest {
     NC='\033[0m' # No Color
@@ -15,7 +16,10 @@ function runTest {
     GREEN='\033[0;32m'
     TEST_BLEND_FILE=$1
     TEST_PATH="$(dirname "$(pwd)/$TEST_BLEND_FILE")"
-    rm -r "$TEST_PATH/tmp"
+    # Remove all but keep DDS files so we can compare them
+    for FILE in $(find "$TEST_PATH/tmp" -type f ! -iname "*old.dds"); do
+        rm "${FILE}"
+    done
     mkdir "$TEST_PATH/tmp"
     if [[ -d "$TEST_PATH/existing" ]]; then
         cp -r "$TEST_PATH/existing" "$TEST_PATH/tmp"
@@ -49,7 +53,7 @@ function runTest {
     # Match checksums
     DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" > /dev/null 2>&1 && pwd | sed "s;\/.\/;;g")"
     CUR_CKSUMS=""
-    for i in $(find $TEST_PATH/tmp -type f); do
+    for i in $(find $TEST_PATH/tmp -type f ! -iname "*old.dds"); do
         FILE=$(basename $i)
         # Strip creation/modification date from files
         EXT="${FILE##*.}"
@@ -73,7 +77,26 @@ function runTest {
             echo "$DAE" > "$i"
         fi
         CKSUM=$(cat $i | md5sum)
-
+        # Do visual compare of .dds files with ImageMagick if it is installed
+        if [ -x "$(command -v magick)" ] && [[ "${FILE##*.}" == "dds" ]]; then
+            if [[ "$2" == "approve" ]]; then
+                cp "${i}" "${i}old.dds"
+            else
+                SIMILARITY=$(magick compare -metric PSNR "${i}old.dds" "${i}" /dev/null 2>&1)
+                if [[ $? -ne 1 ]]; then
+                    echo "IMAGEMAGICK FAILED, FALLING BACK TO CHECKSUM"
+                else
+                    SIMILARITY=$(echo $SIMILARITY | cut -d. -f1)
+                    echo "$FILE Image similarity: $SIMILARITY"
+                    if [[ $SIMILARITY -ge 25 ]] || [[ "$SIMILARITY" == "inf" ]]; then
+                      echo "Image passed Imagemagick similarity test"
+                      CKSUM=$(cat ${i}old.dds | md5sum)
+                    else
+                      CKSUM="New .dds differs too much from old. Min threshold was 25, got $SIMILARITY "
+                    fi
+                fi
+            fi
+        fi
         CUR_CKSUMS=$(echo -e "$CUR_CKSUMS\n$FILE=$CKSUM")
     done
     if [[ "$2" == "approve" ]]; then

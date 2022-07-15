@@ -3,7 +3,9 @@ HPL3 Exporter Develop Branch
 ![](https://i.imgur.com/1PrPPuD.jpg)
 
 Setup - Requires Blender 2.8 or later, and a Windows Bash shell with
-	core utilities such as 'md5sum')
+	core utilities such as 'md5sum', and optionally 'magick' command to test
+	texture similarity, which is more forgiving for images with very slight
+	differences)
 ------------------------------------------------------------------------------
 - At the top of io_export_hpl3_integration_tests/integrationtest.sh, set your
 Blender install path
