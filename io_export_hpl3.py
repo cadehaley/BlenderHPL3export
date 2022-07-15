@@ -5,7 +5,7 @@ bl_info = {
     "name": "HPL3 Export",
     "description": "Export objects and materials directly into an HPL3 map",
     "author": "cadely",
-    "version": (3, 7, 0),
+    "version": (3, 8, 0),
     "blender": (2, 80, 0),
     "location": "3D View > Tools",
     "warning": "", # used for warning icon and text in addons panel
@@ -264,22 +264,24 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                 ob.select_set(False)
             else:
                 ob["hpl3export_obj_name"] = re.sub('[^0-9a-zA-Z]+', '_', ob.name)
-                ob["hpl3export_is_active"] = "FALSE"
                 ob["hpl3export_mesh_name"] = re.sub('[^0-9a-zA-Z]+', '_', ob.data.name)
+                ob["hpl3export_hide_render"] = str(ob.hide_render)
+                # Set original object as unrenderable in case we are baking lighting
+                ob.hide_render = True
                 # Find all associated armatures and add to list
                 if ob.type == "MESH":
                     for mod in ob.modifiers:
                         if mod.type == 'ARMATURE':
                             if mod.object is not None:
                                 mod.object.select_set(True)
-        self.active_object["hpl3export_is_active"] = "TRUE"
         bpy.ops.object.duplicate(mode='DUMMY')
         self.dupes = bpy.context.selected_objects[:]
         # Make the object's data real if it is linked
         for dupe in self.dupes:
             if (dupe.data.library != None):
                 dupe.data.make_local()
-
+            # Make sure object is renderable for baking
+            dupe.hide_render = False
         success = False
         # New export for each object
         if hpl3export.multi_mode == 'MULTI':
@@ -346,6 +348,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         # Restore object selection
         for obj_sel in self.selected:
             obj_sel.select_set(True)
+            obj_sel.hide_render = obj_sel["hpl3export_hide_render"] == "True"
         bpy.context.view_layer.objects.active = self.active_object
 
 
@@ -883,8 +886,8 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             if (hpl3export.bake_multi_mat_into_single == 'OP1' and requires_full_res):
                 res_x = hpl3export.map_res_x
                 res_y = hpl3export.map_res_y
-            map_res_x = res_x/2 if maptype in ('ROUGHNESS', 'PRESPEC') else res_x
-            map_res_y = res_y/2 if maptype in ('ROUGHNESS', 'PRESPEC') else res_y
+            map_res_x = int(res_x/2) if maptype in ('ROUGHNESS', 'PRESPEC') else res_x
+            map_res_y = int(res_y/2) if maptype in ('ROUGHNESS', 'PRESPEC') else res_y
             bpy.ops.image.new(name=base_name + "_" + maptype, width=map_res_x, height=map_res_y)
             mi.image = bpy.context.blend_data.images[base_name + "_" + maptype]
             mi.is_microimage = map_res_x < 32 or map_res_y < 32
@@ -1231,12 +1234,19 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         bake_settings = {}
         self.save_restore_bake_settings("save", bake_settings)
         for mapname, map in self.maps.items():
+            # Deselect all objects
+            for ob in bpy.context.selected_objects:
+                ob.select_set(False)
             using_map = False
             for mapgroup in self.mapgroups:
                 if mapname in mapgroup.metaimages:
                     # Do pre-bake operations
                     mapgroup.prepare_pre_bake(mapname)
                     using_map = True
+                    # Select the mapgroup's object so that we only bake against
+                    # one instance of each mesh
+                    for metamesh in mapgroup.metameshes:
+                        metamesh.object.select_set(True)
             if not using_map:
                 continue
             # Set up bake
@@ -1357,12 +1367,6 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
 
     def bake(self, hpl3export, bake_type):
         try:
-            # Select all that are meshes
-            for ob in bpy.context.selected_objects:
-                ob.select_set(False)
-            for dupe in self.dupes:
-                if dupe.type == 'MESH':
-                    dupe.select_set(True)
             split_materials = hpl3export.bake_multi_mat_into_single != 'OP2'
             bpy.ops.object.bake(type=bake_type, use_split_materials=split_materials)
         except RuntimeError:
@@ -2173,7 +2177,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             try:
                 del obj["hpl3export_obj_name"]
                 del obj["hpl3export_mesh_name"]
-                del obj["hpl3export_is_active"]
+                del obj["hpl3export_is_renderable"]
             except KeyError:
                 print("Could not delete all keys for '", obj.name, "'")
             obj.select_set(True)
