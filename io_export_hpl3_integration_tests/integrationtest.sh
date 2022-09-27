@@ -7,7 +7,7 @@
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" > /dev/null 2>&1 && pwd)"
 cd $DIR
-BLENDER="/c/Program Files/Blender Foundation/Blender 2.93/blender.exe"
+BLENDER="/c/Program Files/Blender Foundation/Blender 3.3/blender.exe"
 #BLENDER="/d/Downloads/blender-3.2.1-windows-x64/blender-3.2.1-windows-x64/blender.exe"
 
 function runTest {
@@ -47,7 +47,13 @@ function runTest {
 
     if [[ $? -ne 0 ]]; then
         printf "${RED}Test $(dirname $1) failed! Blender exited with error${NC}\n"
-        exit 1
+        echo "Continue? (y\n)"
+        read CONTINUE
+        if [[ "$CONTINUE" == "y" ]] || [[ "$CONTINUE" == "Y" ]]; then
+            echo "Continuing..."
+        else
+            exit 1
+        fi
     fi
 
     # Match checksums
@@ -111,7 +117,13 @@ function runTest {
         echo "$CUR_CKSUMS"
         echo
         diff --color <(echo "$SAVED_CKSUMS") <(echo  "$CUR_CKSUMS")
-        exit 1
+        echo "Continue? (y\n)"
+        read CONTINUE
+        if [[ "$CONTINUE" == "y" ]] || [[ "$CONTINUE" == "Y" ]]; then
+            echo "Continuing..."
+        else
+            exit 1
+        fi
     else
         printf "${GREEN}Test $(dirname $1) success${NC}\n"
     fi
