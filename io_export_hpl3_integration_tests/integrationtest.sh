@@ -7,7 +7,7 @@
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" > /dev/null 2>&1 && pwd)"
 cd $DIR
-BLENDER="/c/Program Files/Blender Foundation/Blender 3.3/blender.exe"
+BLENDER="/c/Program Files/Blender Foundation/Blender 3.4/blender.exe"
 #BLENDER="/d/Downloads/blender-3.2.1-windows-x64/blender-3.2.1-windows-x64/blender.exe"
 
 function runTest {
@@ -237,6 +237,9 @@ TESTS["28_multiex_multitex_tinytexture"]="./materials/28_multiex_multitex_tinyte
 
 # Address bug when using multi materials and some don't have normals
 TESTS["29_multiex_multitex_normalbakebug"]="./materials/29_multiex_multitex_normalbakebug/29_multiex_multitex_normalbakebug.blend"
+
+# Fix situation where script mistakenly switches sRGB images to 'non-color' mode if they feed into a Node Group with normal maps
+TESTS["30_multiex_multitex_normalautofix"]="./materials/30_multiex_multitex_normalautofix/30_multiex_multitex_normalautofix.blend"
 
 
 
