@@ -6,7 +6,7 @@ bl_info = {
     "name": "HPL3 Export",
     "description": "Export objects and materials directly into an HPL3 map",
     "author": "cadely",
-    "version": (3, 9, 0),
+    "version": (3, 10, 0),
     "blender": (2, 80, 0),
     "location": "3D View > Tools",
     "warning": "", # used for warning icon and text in addons panel
@@ -234,7 +234,6 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
     #    loop through scene objects and export
     # ------------------------------------------------------------------------
     def export_objects(self, hpl3export):
-        error = 0
 
         # Initialize global vars
         self.main_tool          = hpl3export
@@ -283,7 +282,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                 dupe.data.make_local()
             # Make sure object is renderable for baking
             dupe.hide_render = False
-        success = False
+
         # New export for each object
         if hpl3export.multi_mode == 'MULTI':
             for current in self.dupes:
@@ -312,8 +311,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                 self.delete_unused_textures(hpl3export)
 
             if hpl3export.map_file_path != "" and hpl3export.sync_blender_deletions:
-                error += self.sync_blender_deletions(hpl3export)
-            success = True
+                self.sync_blender_deletions(hpl3export)
 
         # Multiple objects, one export
         elif self.active_object.type == 'MESH':
@@ -340,23 +338,10 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                 self.add_object(hpl3export, self.active_object)
             if hpl3export.bake_multi_mat_into_single != 'OP3':
                 self.delete_unused_textures(hpl3export)
-            success = True
 
-        if success:
-            self.prepare_and_export(hpl3export)
-        self.clean_up()
+        self.prepare_and_export(hpl3export)
 
-        # Restore object selection
-        for obj_sel in self.selected:
-            obj_sel.select_set(True)
-            obj_sel.hide_render = obj_sel["hpl3export_hide_render"] == "True"
-        bpy.context.view_layer.objects.active = self.active_object
-
-
-        msg = "Exported " + str(export_num) + " object(s)."
-        self.report({'INFO'}, "%s" % (msg))
-
-        return error
+        return export_num
 
 
     # ------------------------------------------------------------------------
@@ -1184,8 +1169,8 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
 
             normal_socket = metamat.principled_node.inputs["Normal"]
             if normal_socket.is_linked:
+                # If user forgets to add a Normal Map node, place a new one in between
                 if (type(normal_socket.links[0].from_node) == bpy.types.ShaderNodeTexImage):
-                    # User mistake, place a normal map node in between
                     nrm_out_socket = None
                     for link in node_tree.links:
                         if (link.to_socket == normal_socket):
@@ -1193,20 +1178,16 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                             new = node_tree.nodes.new("ShaderNodeNormalMap")
                             node_tree.links.new(nrm_out_socket, new.inputs[1])
                             node_tree.links.new(new.outputs[0], normal_socket)
-                # Change subnodes to non-color data
-                subtree_nodes = [normal_socket.links[0].from_node]
-                node_list = []
-                while len(subtree_nodes) != 0:
-                    for input in subtree_nodes[0].inputs:
-                        if (input.is_linked):
-                            # Will have duplicates but will include all in subtree
-                            subtree_nodes.append(input.links[0].from_node)
-                    node_list.append(subtree_nodes[0])
-                    subtree_nodes.pop(0)
-                for node in node_list:
-                    if (type(node) == bpy.types.ShaderNodeTexImage):
-                        if(node.image is not None):
-                            node.image.colorspace_settings.name = 'Non-Color'
+                            break
+                # If user has a standard Normalsocket -> Normal Map -> Image Texture setup,
+                # then ensure the colorspace is set to 'Non-Color'
+                if (type(normal_socket.links[0].from_node) == bpy.types.ShaderNodeNormalMap):
+                    normal_map_node = normal_socket.links[0].from_node
+                    if (type(normal_map_node.inputs[1].links[0].from_node) == bpy.types.ShaderNodeTexImage):
+                        image_node = normal_map_node.inputs[1].links[0].from_node
+                        if(image_node.image is not None):
+                            image_node.image.colorspace_settings.name = 'Non-Color'
+                # All other configurations will just be left alone to avoid unexpected bugs
 
         def post_bake(self, metamat, node_tree, image_node):
             print(self.name + " map post-bake")
@@ -2122,65 +2103,70 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                             leftover_files = self.delete_assets(hpl3export, files_to_delete)
                             self.asset_xml.remove(asset)
                             if leftover_files:
-                                return 1
+                                return
                         else:
                             asset.attrib["Uses"] = str(int(asset.attrib["Uses"]) - 1)
         for entry in entries_to_remove:
             objects.remove(entry) # Erase entry
 
-        return 0
+        return
 
     def clean_up(self):
-        for mapgroup in self.mapgroups:
-            for metamat in mapgroup.metamats:
+        if self.mapgroups:
+            for mapgroup in self.mapgroups:
+                for metamat in mapgroup.metamats:
+                    try:
+                        bpy.data.materials.remove(metamat.material)
+                    except (ReferenceError, TypeError) as e:
+                        pass
+                for idx, mi in mapgroup.metaimages.items():
+                    try:
+                        bpy.data.images.remove(mi.image)
+                    except (ReferenceError, TypeError) as e:
+                        pass
+                    try:
+                        bpy.data.images.remove(mi.microimage)
+                    except (ReferenceError, TypeError) as e:
+                        pass
+
+        if self.dupes:
+            for obj in self.dupes:
                 try:
-                    bpy.data.materials.remove(metamat.material)
-                except (ReferenceError, TypeError) as e:
-                    pass
-            for idx, mi in mapgroup.metaimages.items():
-                try:
-                    bpy.data.images.remove(mi.image)
-                except (ReferenceError, TypeError) as e:
-                    pass
-                try:
-                    bpy.data.images.remove(mi.microimage)
+                    if type(obj.data) == bpy.types.Mesh:
+                        print("removing ", obj.data.name)
+                        bpy.data.meshes.remove(obj.data, do_unlink=True)
+                    else:
+                        bpy.data.armatures.remove(obj.data, do_unlink=True)
                 except (ReferenceError, TypeError) as e:
                     pass
 
-        for obj in self.dupes:
-            try:
-                if type(obj.data) == bpy.types.Mesh:
-                    print("removing ", obj.data.name)
-                    bpy.data.meshes.remove(obj.data, do_unlink=True)
-                else:
-                    bpy.data.armatures.remove(obj.data, do_unlink=True)
-            except (ReferenceError, TypeError) as e:
-                pass
-
-        for mapgroup in self.mapgroups:
-            for mm in mapgroup.metameshes:
-                try:
-                    bpy.data.meshes.remove(mm.mesh_original, do_unlink=True)
-                except (ReferenceError, TypeError) as e:
-                    pass
-                try:
-                    bpy.data.meshes.remove(mm.mesh_with_reset_uvs, do_unlink=True)
-                except (ReferenceError, TypeError) as e:
-                    pass
-                try:
-                    bpy.data.meshes.remove(mm.mesh_with_applied_modifiers, do_unlink=True)
-                except (ReferenceError, TypeError) as e:
-                    pass
+        if self.mapgroups:
+            for mapgroup in self.mapgroups:
+                if mapgroup.metameshes:
+                    for mm in mapgroup.metameshes:
+                        try:
+                            bpy.data.meshes.remove(mm.mesh_original, do_unlink=True)
+                        except (ReferenceError, TypeError) as e:
+                            pass
+                        try:
+                            bpy.data.meshes.remove(mm.mesh_with_reset_uvs, do_unlink=True)
+                        except (ReferenceError, TypeError) as e:
+                            pass
+                        try:
+                            bpy.data.meshes.remove(mm.mesh_with_applied_modifiers, do_unlink=True)
+                        except (ReferenceError, TypeError) as e:
+                            pass
 
         # Restore selection and delete custom properties
-        for obj in self.selected:
-            try:
-                del obj["hpl3export_obj_name"]
-                del obj["hpl3export_mesh_name"]
-                del obj["hpl3export_is_renderable"]
-            except KeyError:
-                print("Could not delete all keys for '", obj.name, "'")
-            obj.select_set(True)
+        if self.selected:
+            for obj in self.selected:
+                try:
+                    del obj["hpl3export_obj_name"]
+                    del obj["hpl3export_mesh_name"]
+                    del obj["hpl3export_is_renderable"]
+                except KeyError:
+                    print("Could not delete all keys for '", obj.name, "'")
+                obj.select_set(True)
 
 
 
@@ -2235,22 +2221,32 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             self.asset_xml = ET.Element("ExportedFiles")
 
         print("File read success")
+        export_num = 0
 
-        error = False
+        exception = None
         try:
-            self.export_objects(hpl3export)
-        except self.ExportError:
-            print("Export failed")
-            error = True
-        #DEBUG
-        #ET.dump(asset_xml)
-        # END DEBUG
-        if not error:
+            export_num = self.export_objects(hpl3export)
             if hpl3export.map_file_path != "":
                 ET.ElementTree(self.root).write(map_file_path)
             ET.ElementTree(self.asset_xml).write(asset_xml_path)
-        else:
-            print("\tDid not write to map file or xml tracking")
+        except Exception as e:
+            print("\tEncountered an exception. Did not write to map file or xml tracking. Attempting cleanup")
+            exception = e
+
+        self.clean_up()
+
+        # Restore object selection
+        for obj_sel in self.selected:
+            obj_sel.select_set(True)
+            obj_sel.hide_render = obj_sel["hpl3export_hide_render"] == "True"
+        bpy.context.view_layer.objects.active = self.active_object
+
+        # Have Blender print the traceback if it failed
+        if exception:
+            raise exception
+
+        msg = "Exported " + str(export_num) + " object(s)."
+        self.report({'INFO'}, "%s" % (msg))
 
         return {'FINISHED'}
 
