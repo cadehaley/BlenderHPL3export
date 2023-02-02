@@ -6,7 +6,7 @@ bl_info = {
     "name": "HPL3 Export",
     "description": "Export objects and materials directly into an HPL3 map",
     "author": "cadely",
-    "version": (3, 10, 0),
+    "version": (3, 11, 0),
     "blender": (2, 80, 0),
     "location": "3D View > Tools",
     "warning": "", # used for warning icon and text in addons panel
@@ -149,6 +149,12 @@ class HPL3_Export_Properties (PropertyGroup):
     disable_small_texture_workaround : BoolProperty(
         name="Disable Small Texture UV Reset",
         description="Only applies to specific situations: When baking output textures smaller than 32x32, Blender has a bug that will produce a black output if UVs are smaller than a pixel. If the output texture is small, the addon automatically bakes these textures with reset UVs, which may not be desirable if you are using small textures intentionally",
+        default = False
+        )
+
+    disable_uv_smart_project : BoolProperty(
+        name="Disable UV Smart Project",
+        description="Prevents this tool from auto-unwrapping UVs. This is useful if you want to use your own manually unwrapped UVs in the actively selected UV map as opposed to having this script run 'Smart Project UVs' under the hood",
         default = False
         )
 
@@ -680,7 +686,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             new_uv = uv_layers.new()
             self.smart_project_uvs(current_obj)
         else:
-            self.create_single_uv_map(current_obj)
+            self.create_single_uv_map(hpl3export, current_obj)
         metamesh.create_mesh_with_reset_uvs()
         return
 
@@ -815,7 +821,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             mapgroup.metameshes.append(metamesh)
         slot.material = default_metamat.material
 
-    def create_single_uv_map(self, current_obj):
+    def create_single_uv_map(self, hpl3export, current_obj):
         uv_layers = current_obj.data.uv_layers
         # Hack: delete a slot if we are full
         if len(uv_layers) == 8:
@@ -825,7 +831,8 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         new_uv = uv_layers.new(name="hpl3uv")
         new_uv.active = True
         # Requires object to be the only object selected
-        self.smart_project_uvs(current_obj)
+        if not hpl3export.disable_uv_smart_project:
+            self.smart_project_uvs(current_obj)
         return
 
     def smart_project_uvs(self, current_obj):
@@ -2238,7 +2245,8 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         # Restore object selection
         for obj_sel in self.selected:
             obj_sel.select_set(True)
-            obj_sel.hide_render = obj_sel["hpl3export_hide_render"] == "True"
+            if "hpl3export_hide_render" in obj_sel.keys():
+                obj_sel.hide_render = obj_sel["hpl3export_hide_render"] == "True"
         bpy.context.view_layer.objects.active = self.active_object
 
         # Have Blender print the traceback if it failed
@@ -2331,14 +2339,17 @@ class OBJECT_PT_HPL3_Export (Panel):
             bake_row_1.prop( hpl3export, "square_resolution" )
             bake_row_2.prop( hpl3export, "map_res_x" )
             bake_row_2.prop( hpl3export, "map_res_y" )
-            bake_row_3.prop( hpl3export, "disable_small_texture_workaround")
+            if single_mat:
+                bake_row_3.prop( hpl3export, "disable_uv_smart_project")
+            else:
+                bake_row_3.prop( hpl3export, "disable_small_texture_workaround")
             bake_row_4.prop( hpl3export, "bake_scene_lighting")
             option_row_5.prop( hpl3export, "sync_blender_deletions")
 
             if single_mat or multi_mat:
                 bake_row_1.enabled = True
                 bake_row_2.enabled = True
-                bake_row_3.enabled = (multi_mat)
+                bake_row_3.enabled = True
             else:
                 bake_row_1.enabled = False
                 bake_row_2.enabled = False
