@@ -89,8 +89,16 @@ function runTest {
                 cp "${i}" "${i}old.dds"
             else
                 SIMILARITY=$(magick compare -metric PSNR "${i}old.dds" "${i}" /dev/null 2>&1)
-                if [[ $? -ne 1 ]]; then
-                    echo "IMAGEMAGICK FAILED, FALLING BACK TO CHECKSUM"
+                EXIT_CODE=$?
+                if [[ $EXIT_CODE -ne 1 ]]; then
+                    echo "Imagemagick failed, attempting to convert to .jpg and trying again"
+                    ../nvidia/nvidia_dds.exe ${i} ${i}.jpg
+                    ../nvidia/nvidia_dds.exe ${i}old.dds ${i}old.jpg
+                    SIMILARITY=$(magick compare -metric PSNR "${i}old.jpg" "${i}.jpg" /dev/null 2>&1)
+                    EXIT_CODE=$?
+                fi
+                if [[ $EXIT_CODE -ne 1 ]]; then
+                    echo "COULD NOT COMPARE IMAGES, FALLING BACK TO CHECKSUM"
                 else
                     SIMILARITY=$(echo $SIMILARITY | cut -d. -f1)
                     echo "$FILE Image similarity: $SIMILARITY"
@@ -241,7 +249,8 @@ TESTS["29_multiex_multitex_normalbakebug"]="./materials/29_multiex_multitex_norm
 # Fix situation where script mistakenly switches sRGB images to 'non-color' mode if they feed into a Node Group with normal maps
 TESTS["30_multiex_multitex_normalautofix"]="./materials/30_multiex_multitex_normalautofix/30_multiex_multitex_normalautofix.blend"
 
-
+# Allow user to use their own unwrapped UVs when exporting to a single texture set
+TESTS["31_multiex_singletex_nosmartproject"]="./materials/31_multiex_singletex_nosmartproject/31_multiex_singletex_nosmartproject.blend"
 
 
 
