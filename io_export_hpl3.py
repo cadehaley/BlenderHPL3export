@@ -6,7 +6,7 @@ bl_info = {
     "name": "HPL3 Export",
     "description": "Export objects and materials directly into an HPL3 map",
     "author": "cadely",
-    "version": (3, 11, 0),
+    "version": (3, 12, 0),
     "blender": (2, 80, 0),
     "location": "3D View > Tools",
     "warning": "", # used for warning icon and text in addons panel
@@ -1052,7 +1052,10 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                     node.mute = True
             comp = []
             # add composite output
-            comp.append(comp_tree.nodes.new("CompositorNodeComposite"))
+            new_comp_node = comp_tree.nodes.new("CompositorNodeComposite")
+            # Set it active in order to make its output the render output
+            bpy.context.scene.node_tree.nodes.active = new_comp_node
+            comp.append(new_comp_node)
             # connect alpha convert, straight to premul
             comp.append(comp_tree.nodes.new("CompositorNodePremulKey"))
             comp[1].mapping = 'STRAIGHT_TO_PREMUL'
