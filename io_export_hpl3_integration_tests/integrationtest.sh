@@ -7,8 +7,7 @@
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" > /dev/null 2>&1 && pwd)"
 cd $DIR
-BLENDER="/c/Program Files/Blender Foundation/Blender 3.4/blender.exe"
-#BLENDER="/d/Downloads/blender-3.2.1-windows-x64/blender-3.2.1-windows-x64/blender.exe"
+BLENDER="/c/Program Files/Blender Foundation/Blender 3.5/blender.exe"
 
 function runTest {
     NC='\033[0m' # No Color
