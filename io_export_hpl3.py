@@ -6,7 +6,7 @@ bl_info = {
     "name": "HPL3 Export",
     "description": "Export objects and materials directly into an HPL3 map",
     "author": "cadely",
-    "version": (3, 12, 0),
+    "version": (3, 13, 0),
     "blender": (2, 80, 0),
     "location": "3D View > Tools",
     "warning": "", # used for warning icon and text in addons panel
@@ -1193,10 +1193,11 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                 # then ensure the colorspace is set to 'Non-Color'
                 if (type(normal_socket.links[0].from_node) == bpy.types.ShaderNodeNormalMap):
                     normal_map_node = normal_socket.links[0].from_node
-                    if (type(normal_map_node.inputs[1].links[0].from_node) == bpy.types.ShaderNodeTexImage):
-                        image_node = normal_map_node.inputs[1].links[0].from_node
-                        if(image_node.image is not None):
-                            image_node.image.colorspace_settings.name = 'Non-Color'
+                    if (normal_map_node.inputs[1].is_linked):
+                        if (type(normal_map_node.inputs[1].links[0].from_node) == bpy.types.ShaderNodeTexImage):
+                            image_node = normal_map_node.inputs[1].links[0].from_node
+                            if(image_node.image is not None):
+                                image_node.image.colorspace_settings.name = 'Non-Color'
                 # All other configurations will just be left alone to avoid unexpected bugs
 
         def post_bake(self, metamat, node_tree, image_node):
