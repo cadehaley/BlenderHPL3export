@@ -251,6 +251,9 @@ TESTS["30_multiex_multitex_normalautofix"]="./materials/30_multiex_multitex_norm
 # Allow user to use their own unwrapped UVs when exporting to a single texture set
 TESTS["31_multiex_singletex_nosmartproject"]="./materials/31_multiex_singletex_nosmartproject/31_multiex_singletex_nosmartproject.blend"
 
+# Allow user to set an empty as the active object in a single item export
+TESTS["32_singleex_multitex_activeempty"]="./export_files/32_singleex_multitex_activeempty/32_singleex_multitex_activeempty.blend"
+
 
 
 #===================================================
