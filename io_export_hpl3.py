@@ -6,7 +6,7 @@ bl_info = {
     "name": "HPL3 Export",
     "description": "Export objects and materials directly into an HPL3 map",
     "author": "cadely",
-    "version": (3, 13, 0),
+    "version": (3, 14, 0),
     "blender": (2, 80, 0),
     "location": "3D View > Tools",
     "warning": "", # used for warning icon and text in addons panel
@@ -320,7 +320,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                 self.sync_blender_deletions(hpl3export)
 
         # Multiple objects, one export
-        elif self.active_object.type == 'MESH':
+        else:
             export_num = 1
             # Prevent re-exporting files for instanced objects
             if hpl3export.bake_multi_mat_into_single != 'OP3':
@@ -381,10 +381,11 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         #BEGIN getting variables
 
         # Assemble .dae/ent path
+        mesh_name = self.get_custom_property(current_obj, "hpl3export_mesh_name")
         if is_ent:
-            filepath = self.mesh_export_path + "/" + current_obj["hpl3export_mesh_name"] + "/" + current_obj["hpl3export_mesh_name"] + ".ent"
+            filepath = self.mesh_export_path + "/" + mesh_name + "/" + mesh_name + ".ent"
         else:
-            filepath = self.mesh_export_path + "/" + current_obj["hpl3export_mesh_name"] + "/" + current_obj["hpl3export_mesh_name"] + ".dae"
+            filepath = self.mesh_export_path + "/" + mesh_name + "/" + mesh_name + ".dae"
         filepath = re.sub(r'\\', '/', os.path.normpath(filepath))
         short_path = re.sub(r'.*\/SOMA\/', '', filepath)
 
@@ -432,7 +433,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                 lastID = 285212672
 
         # Get object name
-        obj_name = current_obj["hpl3export_obj_name"]
+        object_name = self.get_custom_property(current_obj, "hpl3export_obj_name")
 
         # Check object for an armature modifier
         is_rigged = False
@@ -475,7 +476,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         else:
             obj_type = "StaticObject"
         for obj in objects.iter(obj_type):
-            if obj_name == obj.get("Name"):
+            if object_name == obj.get("Name"):
                 try:
                     old_mod_time = int(obj.get("ModStamp"))
                 except ValueError:
@@ -492,7 +493,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             created_new = 1
 
 
-        newobj.attrib["Name"] = obj_name
+        newobj.attrib["Name"] = object_name
         newobj.attrib["ModStamp"] = str(int(time.time()))
         newobj.attrib["WorldPos"] = loc_str
         newobj.attrib["Rotation"] = rot_str
@@ -555,7 +556,8 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
     # ------------------------------------------------------------------------
     def get_asset_xml_entry(self, object):
         # Build filepath
-        filepath = self.mesh_export_path + "/" + object["hpl3export_mesh_name"] + "/" + object["hpl3export_mesh_name"] + ".dae"
+        mesh_name = self.get_custom_property(object, "hpl3export_mesh_name")
+        filepath = self.mesh_export_path + "/" + mesh_name + "/" + mesh_name + ".dae"
         filepath = re.sub(r'\\', '/', os.path.normpath(filepath))
         short_path = re.sub(r'.*\/SOMA\/', '', filepath)
         # Find asset path in asset XML list
@@ -570,6 +572,14 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             self.current_DAE = ET.SubElement(self.asset_xml, "Asset")
             self.current_DAE.attrib["DAEpath"] = short_path
             self.current_DAE.attrib["Uses"] = "0"
+
+    def get_custom_property(self, object, prop):
+        # Name fallback in case object is an empty, which is allowed
+        if prop in object:
+            result = object[prop]
+        else:
+            result = object.name
+        return result
 
     class MetaMaterial:
         original        = None
@@ -1470,7 +1480,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         if hpl3export.multi_mode == "MULTI":
             export_dir = self.export_path + meshname_clean + "/"
         else:
-            export_dir = self.export_path + self.active_object["hpl3export_mesh_name"] + "/"
+            export_dir = self.export_path + self.get_custom_property(self.active_object, "hpl3export_mesh_name") + "/"
         return export_dir
 
     def get_full_export_path(self, hpl3export, mapgroup, mesh):
@@ -1549,7 +1559,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         if self.main_tool.multi_mode == "SINGLE":
             dupes_to_export = [
                 {
-                    "name": self.active_object["hpl3export_mesh_name"],
+                    "name": self.get_custom_property(self.active_object, "hpl3export_mesh_name"),
                     "subobjects": temp_objects[:]
                 }
             ]
@@ -2003,7 +2013,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         # Form a dictionary with format { mesh shortpath : [texture shortpaths] }
         for mapgroup in self.mapgroups:
             for metamesh in mapgroup.metameshes:
-                mesh_name = metamesh.object["hpl3export_mesh_name"] if hpl3export.multi_mode == "MULTI" else self.active_object.data.name
+                mesh_name = metamesh.object["hpl3export_mesh_name"] if hpl3export.multi_mode == "MULTI" else self.get_custom_property(self.active_object, "hpl3export_mesh_name")
                 mesh_dir = self.get_export_dir(hpl3export, mesh_name)
                 mesh_path = mesh_dir + re.sub('[^0-9a-zA-Z]+', '_', mesh_name) + ".dae"
                 mesh_path = re.sub(r'.*\/SOMA\/', '', mesh_path)
