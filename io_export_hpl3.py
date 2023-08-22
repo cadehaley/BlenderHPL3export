@@ -6,7 +6,7 @@ bl_info = {
     "name": "HPL3 Export",
     "description": "Export objects and materials directly into an HPL3 map",
     "author": "cadely",
-    "version": (3, 14, 0),
+    "version": (3, 15, 0),
     "blender": (2, 80, 0),
     "location": "3D View > Tools",
     "warning": "", # used for warning icon and text in addons panel
@@ -684,7 +684,6 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                     # Make a copy
                     metamat.material = self.make_data_copy(slot.material)
                     metamat.material.name = temp_mat_name
-                    self.connect_vector_inputs(current_obj, metamat.material)
                 metamat.principled_node = self.get_principled_node(metamat.material)
                 self.prepare_principled_node(metamat.principled_node)
                 # Add material to mapgroup
@@ -736,7 +735,6 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                     # Make a copy
                     metamat.material = self.make_data_copy(slot.material)
                     metamat.material.name = temp_mat_name
-                    #connect_vector_inputs(current_obj, metamat.material)
                 metamat.principled_node = self.get_principled_node(metamat.material)
                 # Add material to mapgroup
                 self.prepare_principled_node(metamat.principled_node)
@@ -791,22 +789,6 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         default_metamat.material = mat
         default_metamat.principled_node = mat.node_tree.nodes["Principled BSDF"]
         return default_metamat
-
-
-
-    def connect_vector_inputs(self, current_obj, mat):
-        old_uv = None
-        for layer in current_obj.data.uv_layers:
-            if layer.active_render == True:
-                old_uv = layer
-        # Add UV input to every node with an empty "Vector" input
-        uv_node = mat.node_tree.nodes.new("ShaderNodeUVMap")
-        uv_node.uv_map = old_uv.name
-        for node in mat.node_tree.nodes:
-            for input in node.inputs:
-                if input.name == "Vector" and not input.is_linked:
-                    mat.node_tree.links.new(uv_node.outputs["UV"], node.inputs["Vector"])
-        return
 
     def set_slot_to_default_material_singletex(self, mesh_name, current_obj, mapgroup, slot):
         default_mat_name = "hpl3export_" + mesh_name + "_default"
