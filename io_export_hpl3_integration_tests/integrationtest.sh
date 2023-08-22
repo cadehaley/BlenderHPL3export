@@ -254,7 +254,8 @@ TESTS["31_multiex_singletex_nosmartproject"]="./materials/31_multiex_singletex_n
 # Allow user to set an empty as the active object in a single item export
 TESTS["32_singleex_multitex_activeempty"]="./export_files/32_singleex_multitex_activeempty/32_singleex_multitex_activeempty.blend"
 
-
+# Stop script from adding unnecessary UV input nodes. Suzanne should have a yellow top shading
+TESTS["33_multiex_singletex_vectornodebug"]="./materials/33_multiex_singletex_vectornodebug/33_multiex_singletex_vectornodebug.blend"
 
 #===================================================
 # If second argument is a valid test name
