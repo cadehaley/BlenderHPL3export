@@ -6,7 +6,7 @@ bl_info = {
     "name": "HPL3 Export",
     "description": "Export objects and materials directly into an HPL3 map",
     "author": "cadely",
-    "version": (3, 15, 0),
+    "version": (3, 16, 0),
     "blender": (2, 80, 0),
     "location": "3D View > Tools",
     "warning": "", # used for warning icon and text in addons panel
@@ -207,12 +207,34 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
     dupes = None
     mapgroups = []
     maps = []
+    bsdf_sockets = {}
 
     class ExportError(Exception):
         pass
 
     def __init__(self):
         self.mapgroups = []
+
+        # Compatibility for BSDF Principled node changes
+        if bpy.app.version >= (4, 0, 0):
+            self.bsdf_sockets = {
+                "Color" : "Base Color",
+                "Specular" : "Specular IOR Level",
+                "Roughness" : "Roughness",
+                "Metallic" : "Metallic",
+                "Transmission" : "Transmission Weight",
+                "Normal" : "Normal"
+            }
+        else:
+            self.bsdf_sockets = {
+                "Color" : "Base Color",
+                "Specular" : "Specular",
+                "Roughness" : "Roughness",
+                "Metallic" : "Metallic",
+                "Transmission" : "Transmission",
+                "Normal" : "Normal"
+            }
+
 
     # ------------------------------------------------------------------------
     #    get NVIDIA DDS converter executable
@@ -248,11 +270,11 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         self.export_path    = hpl3export.statobj_export_path if hpl3export.entity_option == 'OP1' else hpl3export.entity_export_path
         self.export_path    = re.sub(r'\\', '/', os.path.normpath(self.export_path)) + "/"
         self.maps = {
-            "ROUGHNESS": self.RoughnessMap(),
-            "PRESPEC": self.PrespecMap(),
-            "SPECULAR": self.SpecularMap(),
-            "NORMAL": self.NormalMap(),
-            "DIFFUSE": self.DiffuseMap()
+            "ROUGHNESS": self.RoughnessMap(self.bsdf_sockets, "Roughness"),
+            "PRESPEC": self.PrespecMap(self.bsdf_sockets, "Specular"),
+            "SPECULAR": self.SpecularMap(self.bsdf_sockets, "Specular"),
+            "NORMAL": self.NormalMap(self.bsdf_sockets, "Normal"),
+            "DIFFUSE": self.DiffuseMap(self.bsdf_sockets, "Color"),
         }
         # Check that objects were selected
         if len(self.selected) == 0:
@@ -592,6 +614,11 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         temp_image = ""
         microimage = None
         is_microimage = False
+        bsdf_sockets = None
+        socket_name = None
+        def __init__(self, bsdf_sockets, socket_name):
+            self.bsdf_sockets = bsdf_sockets
+            self.socket_name = bsdf_sockets[socket_name]
 
     class MetaMesh:
         object = None
@@ -760,8 +787,8 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         return None
 
     def prepare_principled_node(self, node):
-        node.inputs["Metallic"].default_value = 0
-        node.inputs["Transmission"].default_value = 0
+        node.inputs[self.bsdf_sockets["Metallic"]].default_value = 0
+        node.inputs[self.bsdf_sockets["Transmission"]].default_value = 0
         return
 
     def make_valid_material(self, original, temp_mat_name):
@@ -769,11 +796,11 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         mat.use_nodes = True
         principled_name = "Principled BSDF"
         # Copy base, spec, and roughness
-        mat.node_tree.nodes[principled_name].inputs["Base Color"].default_value = (
+        mat.node_tree.nodes[principled_name].inputs[self.bsdf_sockets["Color"]].default_value = (
             original.diffuse_color[0], original.diffuse_color[1], original.diffuse_color[2], 1
         )
-        mat.node_tree.nodes[principled_name].inputs["Specular"].default_value = original.specular_intensity
-        mat.node_tree.nodes[principled_name].inputs["Roughness"].default_value = original.roughness
+        mat.node_tree.nodes[principled_name].inputs[self.bsdf_sockets["Specular"]].default_value = original.specular_intensity
+        mat.node_tree.nodes[principled_name].inputs[self.bsdf_sockets["Roughness"]].default_value = original.roughness
         return mat
 
 
@@ -841,7 +868,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         # Find if normal map is used
         using_nmap = False
         for metamat in mapgroup.metamats:
-            if metamat.principled_node.inputs["Normal"].is_linked:
+            if metamat.principled_node.inputs[self.bsdf_sockets["Normal"]].is_linked:
                 using_nmap = True
         # Make maps
         for maptype, map in self.maps.items():
@@ -935,7 +962,6 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         suffix              = "_rough"
         exportable          = False
         special_bake_func   = False
-        socket_name         = "Roughness"
         bake_using_diffuse  = False
         def pre_bake(self, metamat, node_tree, image_node):
             print(self.name + " map pre-bake")
@@ -947,13 +973,11 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         suffix              = "_prespec"
         exportable          = False
         special_bake_func   = False
-        socket_name         = "Specular"
         bake_using_diffuse  = True
-
         def pre_bake(self, metamat, node_tree, image_node):
             print(self.name + " map pre-bake")
-            spec_socket = metamat.principled_node.inputs["Specular"]
-            diff_socket = metamat.principled_node.inputs["Base Color"]
+            spec_socket = metamat.principled_node.inputs[self.bsdf_sockets["Specular"]]
+            diff_socket = metamat.principled_node.inputs[self.bsdf_sockets["Color"]]
 
             # If diff socket is linked, change the name and label
             if diff_socket.is_linked:
@@ -976,7 +1000,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
 
         def post_bake(self, metamat, node_tree, image_node):
             print(self.name + " map post-bake")
-            diff_socket = metamat.principled_node.inputs["Base Color"]
+            diff_socket = metamat.principled_node.inputs[self.bsdf_sockets["Color"]]
             # BEWARE: Naming a node "HPL3_ORIGINALDIFF" will connect it even if was originally disconnected
             original_diff = None
             for node in node_tree.nodes:
@@ -1000,9 +1024,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         suffix              = "_spec"
         exportable          = True
         special_bake_func   = True
-        socket_name         = "Specular"
         bake_using_diffuse  = False
-
         def pre_bake(self, metamat, node_tree, image_node):
             print(self.name + " map pre-bake")
         def bake(self, mapgroup, metamat, node_tree, image_node):
@@ -1051,7 +1073,15 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             # connect alpha convert, straight to premul
             comp.append(comp_tree.nodes.new("CompositorNodePremulKey"))
             comp[1].mapping = 'STRAIGHT_TO_PREMUL'
-            comp_tree.links.new(comp[1].outputs[0], comp[0].inputs[0])
+            # Blender 4.0 renders these differently
+            if bpy.app.version >= (4, 0, 0):
+                gamma_c = comp_tree.nodes.new("CompositorNodeBrightContrast")
+                gamma_c.inputs[1].default_value = -18.0
+                gamma_c.inputs[2].default_value = -15.0
+                comp_tree.links.new(gamma_c.outputs[0], comp[0].inputs[0])
+                comp_tree.links.new(comp[1].outputs[0], gamma_c.inputs[0])
+            else:
+                comp_tree.links.new(comp[1].outputs[0], comp[0].inputs[0])
             # connect set alpha
             comp.append(comp_tree.nodes.new("CompositorNodeSetAlpha"))
             comp_tree.links.new(comp[2].outputs[0], comp[1].inputs[0])
@@ -1072,6 +1102,12 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             comp.append(comp_tree.nodes.new("CompositorNodeScale"))
             comp[5].space = 'RENDER_SIZE'
             comp_tree.links.new(comp[5].outputs[0], comp[2].inputs[1])
+            if bpy.app.version >= (4, 0, 0):
+                gamma_a = comp_tree.nodes.new("CompositorNodeBrightContrast")
+                gamma_a.inputs[1].default_value = -18.0
+                gamma_a.inputs[2].default_value = -15.0
+                comp_tree.links.new(gamma_a.outputs[0], comp[0].inputs[1])
+                comp_tree.links.new(comp[5].outputs[0], gamma_a.inputs[0])
             # invert to scale, fac 1
             comp.append(comp_tree.nodes.new("CompositorNodeInvert"))
             comp[6].inputs[0].default_value = 1.0
@@ -1120,11 +1156,18 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             for img in bpy.context.blend_data.images:
                 if (img.type == 'RENDER_RESULT'):
                     hpl3_spec = img
-            scene_disp_device = bpy.context.scene.display_settings.display_device
-            bpy.context.scene.display_settings.display_device = "None"
+            if bpy.app.version >= (4, 0, 0):
+                scene_view_transform = bpy.context.scene.view_settings.view_transform
+                bpy.context.scene.view_settings.view_transform = "Raw"
+            else:
+                scene_disp_device = bpy.context.scene.display_settings.display_device
+                bpy.context.scene.display_settings.display_device = "None"
             self.temp_image = self.temp_path + "_spec.tga"
             hpl3_spec.save_render(self.temp_image)
-            bpy.context.scene.display_settings.display_device = scene_disp_device
+            if bpy.app.version >= (4, 0, 0):
+                bpy.context.scene.view_settings.view_transform = scene_view_transform
+            else:
+                bpy.context.scene.display_settings.display_device = scene_disp_device
             #set above spec Image to FILE, set to path of newly exported image
             image_node.image.source = 'FILE'
             image_node.image.filepath = (self.temp_image)
@@ -1164,12 +1207,11 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         suffix              = "_nrm"
         exportable          = True
         special_bake_func   = False
-        socket_name         = "Normal"
         bake_using_diffuse  = False
         def pre_bake(self, metamat, node_tree, image_node):
             print(self.name + " map pre-bake")
 
-            normal_socket = metamat.principled_node.inputs["Normal"]
+            normal_socket = metamat.principled_node.inputs[self.bsdf_sockets["Normal"]]
             if normal_socket.is_linked:
                 # If user forgets to add a Normal Map node, place a new one in between
                 if (type(normal_socket.links[0].from_node) == bpy.types.ShaderNodeTexImage):
@@ -1202,13 +1244,12 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         suffix              = ""
         exportable          = True
         special_bake_func   = False
-        socket_name         = "Base Color"
         bake_using_diffuse  = True
         def pre_bake(self, metamat, node_tree, image_node):
             print(self.name + " map pre-bake")
         def post_bake(self, metamat, node_tree, image_node):
             print(self.name + " map post-bake")
-            node_tree.links.new(image_node.outputs["Color"], metamat.principled_node.inputs["Base Color"])
+            node_tree.links.new(image_node.outputs["Color"], metamat.principled_node.inputs[self.bsdf_sockets["Color"]])
 
 
     # ------------------------------------------------------------------------
@@ -1405,6 +1446,10 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                     initial_dds = dds_file
                     bpy.context.scene.render.image_settings.file_format = 'TARGA'
                     bpy.context.scene.render.image_settings.color_mode = 'RGBA'
+                    # In Blender 4.0 and later, apply standard view transform to saved images
+                    if bpy.app.version >= (4, 0, 0):
+                        scene_view_transform = bpy.context.scene.view_settings.view_transform
+                        bpy.context.scene.view_settings.view_transform = "Standard"
                     try:
                         mi.image.save_render(tga_file)
                     except RuntimeError:
@@ -1417,6 +1462,8 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
                         print(message)
                         return 1
                         #self.report({'WARNING'}, "%s" % (message))
+                    if bpy.app.version >= (4, 0, 0):
+                        bpy.context.scene.view_settings.view_transform = scene_view_transform
                     # Export DDS
                     if mi.name == 'NORMAL':
                         params=" -normal -bc5 "
@@ -1487,12 +1534,12 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         new_mat = dest_slot.material
         new_img_node = new_mat.node_tree.nodes.new("ShaderNodeTexImage")
         bpy.ops.image.new(name=new_mat_name, width=4, height=4)
-        mi = self.DiffuseMap()
+        mi = self.DiffuseMap(self.bsdf_sockets, "Color")
         mi.image = bpy.context.blend_data.images[new_mat_name]
         mi.image.source = "FILE"
         mi.image.filepath = dds_file
         new_img_node.image = mi.image
-        new_mat.node_tree.links.new(new_img_node.outputs["Color"], new_metamat.principled_node.inputs["Base Color"])
+        new_mat.node_tree.links.new(new_img_node.outputs["Color"], new_metamat.principled_node.inputs[self.bsdf_sockets["Color"]])
         # Add new material to metamats
         mapgroup.metamats.append(new_metamat)
         return mi
