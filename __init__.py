@@ -1,21 +1,6 @@
 # Author: Cade Haley
 # This code is licensed under Creative Commons Attribution 4.0
 
-
-bl_info = {
-    "name": "HPL3 Export",
-    "description": "Export objects and materials directly into an HPL3 map",
-    "author": "cadely",
-    "version": (3, 16, 0),
-    "blender": (2, 80, 0),
-    "location": "3D View > Tools",
-    "warning": "", # used for warning icon and text in addons panel
-    "wiki_url": "",
-    "tracker_url": "",
-    "category": "Import-Export"
-}
-
-
 import bpy, bmesh, struct, os, re, time, math, mathutils, fnmatch, copy
 import xml.etree.ElementTree as ET
 from shutil import copyfile
@@ -212,7 +197,9 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
     class ExportError(Exception):
         pass
 
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
         self.mapgroups = []
 
         # Compatibility for BSDF Principled node changes
@@ -242,7 +229,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
     def nvidiaGet(self):
         spaths = bpy.utils.script_paths()
         for rpath in spaths:
-            tpath = rpath + '\\addons\\nvidia\\nvidia_dds.exe'
+            tpath = rpath + '/addons/nvidia/nvidia_dds.exe'
             if os.path.exists(tpath):
                 npath = '"' + tpath + '"'
                 return npath

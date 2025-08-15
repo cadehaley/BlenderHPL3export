@@ -1,0 +1,12 @@
+schema_version = "1.0.0"
+
+id = "hpl3_export"
+version = "3.17.0"
+name = "HPL3 Export"
+tagline = "Export objects and materials directly into an HPL3 map"
+maintainer = "cadely"
+type = "add-on"
+website = "https://github.com/cadehaley/BlenderHPL3export"
+tags = ["Import-Export"] # https://docs.blender.org/manual/en/dev/advanced/extensions/tags.html
+blender_version_min = "4.2.0"
+license = ["CC-BY-4.0"] # https://docs.blender.org/manual/en/dev/advanced/extensions/licenses.html
