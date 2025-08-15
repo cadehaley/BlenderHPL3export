@@ -7,7 +7,7 @@
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" > /dev/null 2>&1 && pwd)"
 cd $DIR
-BLENDER="/c/Program Files/Blender Foundation/Blender 3.5/blender.exe"
+BLENDER="/c/Program Files/Blender Foundation/Blender 4.5/blender.exe"
 
 function runTest {
     NC='\033[0m' # No Color
@@ -41,7 +41,7 @@ function runTest {
     fi
     TEST_PATH=$TEST_PATH BUILD=$BUILD "$BLENDER" $HIDE_GUI --log-level 0 $TEST_BLEND_FILE \
     --python ./utils/disable_addons.py \
-    --python ../io_export_hpl3.py \
+    --python ../__init__.py \
     --python ./utils/set_export_paths.py
 
     if [[ $? -ne 0 ]]; then
