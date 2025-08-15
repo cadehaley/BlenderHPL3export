@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "hpl3_export"
-version = "3.17.0"
+version = "3.18.0"
 name = "HPL3 Export"
 tagline = "Export objects and materials directly into an HPL3 map"
 maintainer = "cadely"
