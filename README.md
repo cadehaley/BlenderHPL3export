@@ -1,4 +1,4 @@
-HPL3 Exporter Version 3.16
+HPL3 Exporter Version 3.18
 ==============================================================================
 ![](https://i.imgur.com/1PrPPuD.jpg)
 
@@ -9,13 +9,12 @@ for a fast iteration process. The script is also capable of removing objects
 from the HPL3 map which have been removed in the Blender scene, exporting
 rigged and animated objects, and baking lighting onto scene objects.
 
-Installation (Requires Windows and Blender 2.80 or later. Tested with 4.0)
+Installation (Requires Windows and Blender 2.80 or later. Tested with 4.5)
 ------------------------------------------------------------------------------
+- Download this repo as a ZIP file
 
-- Copy "io_export_hpl3.py" and the "nvidia" folder to Blender's addons
-directory (".../Blender/2.80/scripts/addons")
-
-- Open Blender, go to Edit > Preferences > Add-ons > Search "hpl3"
+- Open Blender, and go to Edit > Preferences > Add-ons > Install from disk,
+then select the .zip file
 
 - Check box next to "Import-Export: HPL3 Export" and press "Save Preferences"
 

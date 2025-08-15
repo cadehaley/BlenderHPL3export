@@ -1,21 +1,6 @@
 # Author: Cade Haley
 # This code is licensed under Creative Commons Attribution 4.0
 
-
-bl_info = {
-    "name": "HPL3 Export",
-    "description": "Export objects and materials directly into an HPL3 map",
-    "author": "cadely",
-    "version": (3, 16, 0),
-    "blender": (2, 80, 0),
-    "location": "3D View > Tools",
-    "warning": "", # used for warning icon and text in addons panel
-    "wiki_url": "",
-    "tracker_url": "",
-    "category": "Import-Export"
-}
-
-
 import bpy, bmesh, struct, os, re, time, math, mathutils, fnmatch, copy
 import xml.etree.ElementTree as ET
 from shutil import copyfile
@@ -33,6 +18,18 @@ from bpy.types import (Panel,
                        PropertyGroup,
                        )
 
+bl_info = {
+    "name": "HPL3 Export",
+    "description": "Export objects and materials directly into an HPL3 map",
+    "author": "cadely",
+    "version": (3, 18, 0),
+    "blender": (2, 8, 0),
+    "location": "3D View > Tools",
+    "warning": "", # used for warning icon and text in addons panel
+    "wiki_url": "",
+    "tracker_url": "",
+    "category": "Import-Export"
+}
 
 # ------------------------------------------------------------------------
 #    store properties in the active scene
@@ -212,7 +209,9 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
     class ExportError(Exception):
         pass
 
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
         self.mapgroups = []
 
         # Compatibility for BSDF Principled node changes
@@ -242,7 +241,12 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
     def nvidiaGet(self):
         spaths = bpy.utils.script_paths()
         for rpath in spaths:
-            tpath = rpath + '\\addons\\nvidia\\nvidia_dds.exe'
+            tpath = rpath + '/addons/nvidia/nvidia_dds.exe'
+            if os.path.exists(tpath):
+                npath = '"' + tpath + '"'
+                return npath
+        if bpy.app.version >= (4, 0, 0):
+            tpath = bpy.utils.user_resource('EXTENSIONS') + "/user_default/hpl3_export/nvidia/nvidia_dds.exe"
             if os.path.exists(tpath):
                 npath = '"' + tpath + '"'
                 return npath
@@ -1074,7 +1078,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             comp.append(comp_tree.nodes.new("CompositorNodePremulKey"))
             comp[1].mapping = 'STRAIGHT_TO_PREMUL'
             # Blender 4.0 renders these differently
-            if bpy.app.version >= (4, 0, 0):
+            if bpy.app.version >= (4, 0, 0) and bpy.app.version < (4, 5, 0):
                 gamma_c = comp_tree.nodes.new("CompositorNodeBrightContrast")
                 gamma_c.inputs[1].default_value = -18.0
                 gamma_c.inputs[2].default_value = -15.0
@@ -1102,7 +1106,7 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
             comp.append(comp_tree.nodes.new("CompositorNodeScale"))
             comp[5].space = 'RENDER_SIZE'
             comp_tree.links.new(comp[5].outputs[0], comp[2].inputs[1])
-            if bpy.app.version >= (4, 0, 0):
+            if bpy.app.version >= (4, 0, 0) and bpy.app.version < (4, 5, 0):
                 gamma_a = comp_tree.nodes.new("CompositorNodeBrightContrast")
                 gamma_a.inputs[1].default_value = -18.0
                 gamma_a.inputs[2].default_value = -15.0
