@@ -18,6 +18,18 @@ from bpy.types import (Panel,
                        PropertyGroup,
                        )
 
+bl_info = {
+    "name": "HPL3 Export",
+    "description": "Export objects and materials directly into an HPL3 map",
+    "author": "cadely",
+    "version": (3, 18, 0),
+    "blender": (2, 8, 0),
+    "location": "3D View > Tools",
+    "warning": "", # used for warning icon and text in addons panel
+    "wiki_url": "",
+    "tracker_url": "",
+    "category": "Import-Export"
+}
 
 # ------------------------------------------------------------------------
 #    store properties in the active scene
@@ -230,6 +242,11 @@ class OBJECT_OT_HPL3_Export (bpy.types.Operator):
         spaths = bpy.utils.script_paths()
         for rpath in spaths:
             tpath = rpath + '/addons/nvidia/nvidia_dds.exe'
+            if os.path.exists(tpath):
+                npath = '"' + tpath + '"'
+                return npath
+        if bpy.app.version >= (4, 0, 0):
+            tpath = bpy.utils.user_resource('EXTENSIONS') + "/user_default/hpl3_export/nvidia/nvidia_dds.exe"
             if os.path.exists(tpath):
                 npath = '"' + tpath + '"'
                 return npath
@@ -2309,7 +2326,7 @@ class OBJECT_PT_HPL3_Export (Panel):
         scene = context.scene
         hpl3export = scene.hpl3_export
 
-        layout.label(text=str(len(bpy.context.selected_objects)) + " Object(s) Selected for Export")
+        layout.label(text=str(len(bpy.context.selected_objects)) + " Object(s) Selected for derpaderp")
         layout.label(text="Duplicate with ALT+D to share a mesh", icon="ERROR")
         obj_type_row = layout.row(align=True)
         obj_type_row.prop( hpl3export, "entity_option", text="")

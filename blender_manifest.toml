@@ -8,5 +8,5 @@ maintainer = "cadely"
 type = "add-on"
 website = "https://github.com/cadehaley/BlenderHPL3export"
 tags = ["Import-Export"] # https://docs.blender.org/manual/en/dev/advanced/extensions/tags.html
-blender_version_min = "4.2.0"
+blender_version_min = "2.8.0"
 license = ["CC-BY-4.0"] # https://docs.blender.org/manual/en/dev/advanced/extensions/licenses.html
