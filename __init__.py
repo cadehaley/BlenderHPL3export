@@ -2326,7 +2326,7 @@ class OBJECT_PT_HPL3_Export (Panel):
         scene = context.scene
         hpl3export = scene.hpl3_export
 
-        layout.label(text=str(len(bpy.context.selected_objects)) + " Object(s) Selected for derpaderp")
+        layout.label(text=str(len(bpy.context.selected_objects)) + " Object(s) Selected for Export")
         layout.label(text="Duplicate with ALT+D to share a mesh", icon="ERROR")
         obj_type_row = layout.row(align=True)
         obj_type_row.prop( hpl3export, "entity_option", text="")
